@@ -62,6 +62,8 @@ export function ScoreRing({
 
   const displayScore = useTransform(springValue, (value) => Math.round(value));
 
+  const endCapOpacity = useTransform(springValue, (v) => (v > 5 ? 0.6 : 0));
+
   useEffect(() => {
     if (animate) {
       springValue.set(score);
@@ -121,18 +123,14 @@ export function ScoreRing({
         />
 
         {/* Animated end cap glow */}
-        {score > 0 && (
-          <motion.circle
-            cx={center}
-            cy={center - radius}
-            r={strokeWidth / 2 + 2}
-            fill={colors.primary}
-            filter={`url(#glow-${gradientId})`}
-            style={{
-              opacity: useTransform(springValue, (v) => (v > 5 ? 0.6 : 0)),
-            }}
-          />
-        )}
+        <motion.circle
+          cx={center}
+          cy={center - radius}
+          r={strokeWidth / 2 + 2}
+          fill={colors.primary}
+          filter={`url(#glow-${gradientId})`}
+          style={{ opacity: endCapOpacity }}
+        />
       </svg>
 
       {/* Center content */}
