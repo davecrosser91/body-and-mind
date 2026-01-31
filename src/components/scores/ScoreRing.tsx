@@ -135,17 +135,23 @@ export function ScoreRing({
 
       {/* Center content */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        {/* Score number */}
+        {/* Score number - size scales with ring */}
         <motion.span
-          className="text-4xl font-bold tabular-nums"
-          style={{ color: colors.primary }}
+          className="font-bold tabular-nums"
+          style={{
+            color: colors.primary,
+            fontSize: size * 0.22,
+          }}
         >
           {displayScore}
         </motion.span>
 
         {/* Label */}
         {showLabel && (
-          <span className="text-xs text-text-muted uppercase tracking-wider mt-1">
+          <span
+            className="text-text-muted uppercase tracking-wider"
+            style={{ fontSize: Math.max(10, size * 0.075), marginTop: size * 0.02 }}
+          >
             {colors.label}
           </span>
         )}
