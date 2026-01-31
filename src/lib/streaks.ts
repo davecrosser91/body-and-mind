@@ -1,4 +1,4 @@
-import { prisma } from './db';
+import { prisma } from '@/lib/db';
 
 // Pillar keys for streaks
 export type PillarKey = 'BODY' | 'MIND' | 'OVERALL';
@@ -17,9 +17,6 @@ export interface AllStreaks {
   mind: StreakInfo;
 }
 
-// Minimum score to count as "active" for a day
-const MIN_ACTIVE_SCORE = 30;
-
 // ============ HELPER FUNCTIONS ============
 
 /**
@@ -37,89 +34,48 @@ function getHoursRemainingToday(): number {
 }
 
 /**
- * Check if a pillar was active on a given date (score >= threshold)
- */
-async function wasPillarActive(
-  userId: string,
-  date: Date,
-  pillarKey: PillarKey
-): Promise<boolean> {
-  const dateOnly = new Date(date);
-  dateOnly.setHours(0, 0, 0, 0);
-
-  const score = await prisma.dailyScore.findUnique({
-    where: {
-      userId_date: {
-        userId,
-        date: dateOnly,
-      },
-    },
-    select: {
-      bodyScore: true,
-      mindScore: true,
-      balanceIndex: true,
-    },
-  });
-
-  if (!score) return false;
-
-  if (pillarKey === 'BODY') {
-    return score.bodyScore >= MIN_ACTIVE_SCORE;
-  } else if (pillarKey === 'MIND') {
-    return score.mindScore >= MIN_ACTIVE_SCORE;
-  }
-
-  // OVERALL: both pillars need to be active
-  return score.bodyScore >= MIN_ACTIVE_SCORE && score.mindScore >= MIN_ACTIVE_SCORE;
-}
-
-/**
  * Check if a day is complete for a given pillar based on habit completions
  * For OVERALL, both Body AND Mind must have at least 1 completion
+ * Uses count queries for better performance
  */
 export async function isDayComplete(
   userId: string,
   date: Date,
   pillarKey: PillarKey = 'OVERALL'
 ): Promise<boolean> {
-  const dateOnly = new Date(date);
-  dateOnly.setHours(0, 0, 0, 0);
-  const dateEnd = new Date(dateOnly);
-  dateEnd.setHours(23, 59, 59, 999);
-
-  // Get habits with completions for the given date
-  const habits = await prisma.habit.findMany({
-    where: {
-      userId,
-      archived: false,
-      pillar: pillarKey === 'OVERALL' ? { in: ['BODY', 'MIND'] } : pillarKey,
-    },
-    include: {
-      completions: {
-        where: {
-          completedAt: {
-            gte: dateOnly,
-            lte: dateEnd,
-          },
-        },
-        take: 1,
-      },
-    },
-  });
+  const dayStart = new Date(date);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
 
   if (pillarKey === 'BODY' || pillarKey === 'MIND') {
-    // For single pillar, check if any habit was completed
-    return habits.some((habit) => habit.completions.length > 0);
+    // For single pillar, use count query
+    const count = await prisma.habitCompletion.count({
+      where: {
+        habit: { userId, pillar: pillarKey, archived: false },
+        completedAt: { gte: dayStart, lt: dayEnd },
+      },
+    });
+    return count > 0;
   }
 
   // For OVERALL, both Body AND Mind must have at least 1 completion
-  const bodyHabits = habits.filter((h) => h.pillar === 'BODY');
-  const mindHabits = habits.filter((h) => h.pillar === 'MIND');
+  const [bodyCount, mindCount] = await Promise.all([
+    prisma.habitCompletion.count({
+      where: {
+        habit: { userId, pillar: 'BODY', archived: false },
+        completedAt: { gte: dayStart, lt: dayEnd },
+      },
+    }),
+    prisma.habitCompletion.count({
+      where: {
+        habit: { userId, pillar: 'MIND', archived: false },
+        completedAt: { gte: dayStart, lt: dayEnd },
+      },
+    }),
+  ]);
 
-  const bodyComplete = bodyHabits.some((h) => h.completions.length > 0);
-  const mindComplete = mindHabits.some((h) => h.completions.length > 0);
-
-  return bodyComplete && mindComplete;
+  return bodyCount > 0 && mindCount > 0;
 }
 
 /**
@@ -203,39 +159,102 @@ async function getOrCreateStreak(
 /**
  * Update streak after completing a day
  * Updates the streak in the database and returns the enhanced StreakInfo
+ * Wrapped in a transaction to prevent race conditions
  */
 export async function updateStreak(
   userId: string,
   pillarKey: PillarKey,
   date: Date
 ): Promise<StreakInfo> {
-  const rawStreak = await getRawStreak(userId, pillarKey);
   const dateOnly = new Date(date);
   dateOnly.setHours(0, 0, 0, 0);
   const hoursRemaining = getHoursRemainingToday();
 
-  // If already updated today, return current streak info
-  if (rawStreak.lastActiveDate) {
-    const lastDate = new Date(rawStreak.lastActiveDate);
-    lastDate.setHours(0, 0, 0, 0);
+  // Check if active today using habit completions (outside transaction for read)
+  const isActive = await isDayComplete(userId, date, pillarKey);
 
-    if (lastDate.getTime() === dateOnly.getTime()) {
-      const todayComplete = await isDayComplete(userId, new Date(), pillarKey);
+  // Use transaction for the read-check-update sequence
+  const result = await prisma.$transaction(async (tx) => {
+    // Get or create streak within transaction
+    let rawStreak = await tx.streak.findUnique({
+      where: {
+        userId_pillarKey: {
+          userId,
+          pillarKey,
+        },
+      },
+    });
+
+    if (!rawStreak) {
+      rawStreak = await tx.streak.create({
+        data: {
+          userId,
+          pillarKey,
+          current: 0,
+          longest: 0,
+          lastActiveDate: null,
+        },
+      });
+    }
+
+    // If already updated today, return current streak info
+    if (rawStreak.lastActiveDate) {
+      const lastDate = new Date(rawStreak.lastActiveDate);
+      lastDate.setHours(0, 0, 0, 0);
+
+      if (lastDate.getTime() === dateOnly.getTime()) {
+        return {
+          current: rawStreak.current,
+          longest: rawStreak.longest,
+          lastActiveDate: rawStreak.lastActiveDate,
+          updated: false,
+        };
+      }
+    }
+
+    if (!isActive) {
+      // Check if we broke the streak (missed yesterday)
+      if (rawStreak.lastActiveDate) {
+        const lastDate = new Date(rawStreak.lastActiveDate);
+        lastDate.setHours(0, 0, 0, 0);
+
+        const daysSinceActive = Math.floor(
+          (dateOnly.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)
+        );
+
+        if (daysSinceActive > 1) {
+          // Streak broken - reset to 0
+          const updated = await tx.streak.update({
+            where: {
+              userId_pillarKey: { userId, pillarKey },
+            },
+            data: {
+              current: 0,
+            },
+          });
+
+          return {
+            current: updated.current,
+            longest: updated.longest,
+            lastActiveDate: updated.lastActiveDate,
+            updated: true,
+            streakBroken: true,
+          };
+        }
+      }
+
+      // Not active today but streak not broken yet (yesterday was active)
       return {
         current: rawStreak.current,
         longest: rawStreak.longest,
-        lastActiveDate: rawStreak.lastActiveDate.toISOString().split('T')[0] as string,
-        atRisk: rawStreak.current > 0 && !todayComplete,
-        hoursRemaining,
+        lastActiveDate: rawStreak.lastActiveDate,
+        updated: false,
       };
     }
-  }
 
-  // Check if active today using habit completions (for combined streak)
-  const isActive = await isDayComplete(userId, date, pillarKey);
+    // Active today - update streak
+    let newCurrent = 1;
 
-  if (!isActive) {
-    // Check if we broke the streak (missed yesterday)
     if (rawStreak.lastActiveDate) {
       const lastDate = new Date(rawStreak.lastActiveDate);
       lastDate.setHours(0, 0, 0, 0);
@@ -244,86 +263,54 @@ export async function updateStreak(
         (dateOnly.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)
       );
 
-      if (daysSinceActive > 1) {
-        // Streak broken - reset to 0
-        const updated = await prisma.streak.update({
-          where: {
-            userId_pillarKey: { userId, pillarKey },
-          },
-          data: {
-            current: 0,
-          },
-        });
-
-        return {
-          current: updated.current,
-          longest: updated.longest,
-          lastActiveDate: updated.lastActiveDate
-            ? updated.lastActiveDate.toISOString().split('T')[0] as string
-            : null,
-          atRisk: false, // Streak is 0, not at risk
-          hoursRemaining,
-        };
+      if (daysSinceActive === 1) {
+        // Consecutive day - increment
+        newCurrent = rawStreak.current + 1;
+      } else if (daysSinceActive === 0) {
+        // Same day - keep current
+        newCurrent = rawStreak.current;
       }
+      // If daysSinceActive > 1, streak was broken, start at 1
     }
 
-    // Not active today but streak not broken yet (yesterday was active)
-    const todayComplete = await isDayComplete(userId, new Date(), pillarKey);
+    const newLongest = Math.max(rawStreak.longest, newCurrent);
+
+    const updated = await tx.streak.update({
+      where: {
+        userId_pillarKey: { userId, pillarKey },
+      },
+      data: {
+        current: newCurrent,
+        longest: newLongest,
+        lastActiveDate: dateOnly,
+      },
+    });
+
     return {
-      current: rawStreak.current,
-      longest: rawStreak.longest,
-      lastActiveDate: rawStreak.lastActiveDate
-        ? rawStreak.lastActiveDate.toISOString().split('T')[0] as string
-        : null,
-      atRisk: rawStreak.current > 0 && !todayComplete,
-      hoursRemaining,
+      current: updated.current,
+      longest: updated.longest,
+      lastActiveDate: updated.lastActiveDate,
+      updated: true,
+      newCurrent,
     };
-  }
-
-  // Active today - update streak
-  let newCurrent = 1;
-
-  if (rawStreak.lastActiveDate) {
-    const lastDate = new Date(rawStreak.lastActiveDate);
-    lastDate.setHours(0, 0, 0, 0);
-
-    const daysSinceActive = Math.floor(
-      (dateOnly.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    if (daysSinceActive === 1) {
-      // Consecutive day - increment
-      newCurrent = rawStreak.current + 1;
-    } else if (daysSinceActive === 0) {
-      // Same day - keep current
-      newCurrent = rawStreak.current;
-    }
-    // If daysSinceActive > 1, streak was broken, start at 1
-  }
-
-  const newLongest = Math.max(rawStreak.longest, newCurrent);
-
-  const updated = await prisma.streak.update({
-    where: {
-      userId_pillarKey: { userId, pillarKey },
-    },
-    data: {
-      current: newCurrent,
-      longest: newLongest,
-      lastActiveDate: dateOnly,
-    },
   });
 
-  // Check for streak achievements
-  await checkStreakAchievements(userId, newCurrent);
+  // Check for streak achievements outside transaction
+  if (result.updated && result.newCurrent) {
+    await checkStreakAchievements(userId, result.newCurrent);
+  }
+
+  // Determine atRisk status
+  const todayComplete = isActive || (await isDayComplete(userId, new Date(), pillarKey));
+  const atRisk = result.current > 0 && !todayComplete;
 
   return {
-    current: updated.current,
-    longest: updated.longest,
-    lastActiveDate: updated.lastActiveDate
-      ? updated.lastActiveDate.toISOString().split('T')[0] as string
+    current: result.current,
+    longest: result.longest,
+    lastActiveDate: result.lastActiveDate
+      ? result.lastActiveDate.toISOString().split('T')[0] as string
       : null,
-    atRisk: false, // Day is complete, not at risk
+    atRisk,
     hoursRemaining,
   };
 }
