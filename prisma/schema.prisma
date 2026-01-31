@@ -51,6 +51,14 @@ enum Frequency {
   CUSTOM
 }
 
+enum WeightPreset {
+  BALANCED
+  ATHLETE
+  RECOVERY
+  KNOWLEDGE
+  CUSTOM
+}
+
 enum QuoteCategory {
   MOTIVATION
   CONSISTENCY
@@ -83,6 +91,7 @@ model User {
   streaks           Streak[]
   achievements      Achievement[]
   dailyGoals        DailyGoal[]
+  weightConfig      WeightConfig?
 }
 
 model Habit {
@@ -244,4 +253,25 @@ model DailyGoal {
 
   @@unique([userId, date])
   @@index([userId])
+}
+
+model WeightConfig {
+  id        String       @id @default(cuid())
+  userId    String       @unique
+  preset    WeightPreset @default(BALANCED)
+
+  // Body weights (must sum to 100)
+  trainingWeight  Int @default(35)
+  sleepWeight     Int @default(35)
+  nutritionWeight Int @default(30)
+
+  // Mind weights (must sum to 100)
+  meditationWeight Int @default(40)
+  readingWeight    Int @default(30)
+  learningWeight   Int @default(30)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
