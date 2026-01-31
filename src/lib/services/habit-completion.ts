@@ -8,7 +8,9 @@
 import { prisma } from '@/lib/db'
 import { calculateHabitXP, calculateLevel, calculateEvolutionStage } from '@/lib/xp'
 import { recoverHealth } from '@/lib/habitanimal-health'
-import { HabitCompletion, Habitanimal, Habit } from '@prisma/client'
+import { HabitCompletion, Habitanimal, Habit, Pillar, SubCategory, Category, Source, Frequency } from '@prisma/client'
+import { updateDailyGoal } from '@/lib/daily-status'
+import { updateStreak } from '@/lib/streaks'
 
 // Types
 
@@ -30,6 +32,20 @@ export interface CompletionResult {
   completion: HabitCompletion
   xpEarned: number
   habitanimal: HabitanimalStateChange
+}
+
+export interface LogActivityInput {
+  pillar: 'BODY' | 'MIND'
+  category: string // SubCategory value
+  duration?: number // minutes
+  details?: string
+  source?: 'manual' | 'whoop' | 'api'
+}
+
+export interface LogActivityResult {
+  habitId: string
+  completionId: string
+  isNew: boolean
 }
 
 export interface UncompleteResult {
@@ -336,4 +352,228 @@ export async function getCompletionHistory(
   ])
 
   return { completions, totalCount }
+}
+
+// ============ ACTIVITY LOGGING ============
+
+/**
+ * Default habit names for auto-created habits by category
+ */
+const CATEGORY_HABIT_NAMES: Record<string, string> = {
+  TRAINING: 'Workout',
+  SLEEP: 'Sleep',
+  NUTRITION: 'Healthy Eating',
+  MEDITATION: 'Meditation',
+  READING: 'Reading',
+  LEARNING: 'Learning',
+  JOURNALING: 'Journaling',
+}
+
+/**
+ * Map subcategory to legacy Category enum for backward compatibility
+ */
+function mapSubCategoryToCategory(subCategory: SubCategory): Category {
+  switch (subCategory) {
+    case 'TRAINING':
+      return Category.FITNESS
+    case 'SLEEP':
+      return Category.SLEEP
+    case 'NUTRITION':
+      return Category.NUTRITION
+    case 'MEDITATION':
+      return Category.MINDFULNESS
+    case 'READING':
+    case 'LEARNING':
+    case 'JOURNALING':
+      return Category.LEARNING
+    default:
+      return Category.FITNESS
+  }
+}
+
+/**
+ * Map source string to Source enum
+ */
+function mapSource(source?: 'manual' | 'whoop' | 'api'): Source {
+  switch (source) {
+    case 'whoop':
+      return Source.WHOOP
+    case 'api':
+      return Source.MANUAL // API source treated as manual for now
+    case 'manual':
+    default:
+      return Source.MANUAL
+  }
+}
+
+/**
+ * Log an activity for a user
+ *
+ * This function handles the complete activity logging flow:
+ * 1. Find existing habit for pillar+category, or create one
+ * 2. Create completion with details (duration, notes, source)
+ * 3. Update habitanimal XP and stats
+ * 4. Update streak after logging
+ * 5. Update daily goal after logging
+ *
+ * @param userId - The ID of the user
+ * @param input - Activity input data
+ * @returns LogActivityResult with habit ID, completion ID, and whether habit was newly created
+ */
+export async function logActivity(
+  userId: string,
+  input: LogActivityInput
+): Promise<LogActivityResult> {
+  const { pillar, category, duration, details, source } = input
+
+  // Validate category is a valid SubCategory
+  const validSubCategories = Object.values(SubCategory) as string[]
+  if (!validSubCategories.includes(category)) {
+    throw new Error(`Invalid category: ${category}`)
+  }
+
+  const subCategory = category as SubCategory
+
+  // 1. Find existing habit for this pillar+category or create one
+  let habit = await prisma.habit.findFirst({
+    where: {
+      userId,
+      pillar: pillar as Pillar,
+      subCategory,
+      archived: false,
+    },
+  })
+
+  let isNew = false
+
+  if (!habit) {
+    // Create a new habit for this category
+    const habitName = CATEGORY_HABIT_NAMES[category] || category
+    const legacyCategory = mapSubCategoryToCategory(subCategory)
+
+    habit = await prisma.habit.create({
+      data: {
+        name: habitName,
+        category: legacyCategory,
+        pillar: pillar as Pillar,
+        subCategory,
+        frequency: Frequency.DAILY,
+        userId,
+      },
+    })
+    isNew = true
+  }
+
+  // 2. Check if already completed today
+  const { start, end } = getTodayBounds()
+  const existingCompletion = await prisma.habitCompletion.findFirst({
+    where: {
+      habitId: habit.id,
+      completedAt: {
+        gte: start,
+        lte: end,
+      },
+    },
+  })
+
+  if (existingCompletion) {
+    // Already completed today - return existing completion
+    return {
+      habitId: habit.id,
+      completionId: existingCompletion.id,
+      isNew: false,
+    }
+  }
+
+  // 3. Build details string including duration if provided
+  let completionDetails = details || ''
+  if (duration && duration > 0) {
+    const durationNote = `Duration: ${duration} minutes`
+    completionDetails = completionDetails
+      ? `${completionDetails}\n${durationNote}`
+      : durationNote
+  }
+
+  // 4. Calculate XP
+  const hasDetails = Boolean(completionDetails && completionDetails.trim().length > 0)
+  const xpEarned = calculateHabitXP(hasDetails)
+
+  // 5. Get habitanimal for this category (using legacy category mapping)
+  const habitanimalType = habit.category as unknown as Habitanimal['type']
+  const habitanimal = await prisma.habitanimal.findFirst({
+    where: {
+      userId,
+      type: habitanimalType,
+    },
+  })
+
+  // 6. Create completion and update habitanimal in a transaction
+  const mappedSource = mapSource(source)
+
+  let completion: HabitCompletion
+
+  if (habitanimal) {
+    // Calculate new state values for habitanimal
+    const previousXP = habitanimal.xp
+    const newXP = previousXP + xpEarned
+    const newLevel = calculateLevel(newXP)
+    const newEvolutionStage = calculateEvolutionStage(newLevel)
+    const previousHealth = habitanimal.health
+    const newHealth = recoverHealth(previousHealth)
+
+    const [createdCompletion] = await prisma.$transaction([
+      prisma.habitCompletion.create({
+        data: {
+          habitId: habit.id,
+          details: completionDetails || null,
+          xpEarned,
+          source: mappedSource,
+        },
+      }),
+      prisma.habitanimal.update({
+        where: { id: habitanimal.id },
+        data: {
+          xp: newXP,
+          level: newLevel,
+          evolutionStage: newEvolutionStage,
+          health: newHealth,
+          lastInteraction: new Date(),
+        },
+      }),
+    ])
+    completion = createdCompletion
+  } else {
+    // No habitanimal - just create the completion
+    completion = await prisma.habitCompletion.create({
+      data: {
+        habitId: habit.id,
+        details: completionDetails || null,
+        xpEarned,
+        source: mappedSource,
+      },
+    })
+  }
+
+  // 7. Update daily goal (async, non-blocking)
+  try {
+    await updateDailyGoal(userId, pillar, habit.id)
+  } catch (error) {
+    console.error('Failed to update daily goal:', error)
+    // Non-critical, continue
+  }
+
+  // 8. Update streak (async, non-blocking)
+  try {
+    await updateStreak(userId, pillar, new Date())
+    await updateStreak(userId, 'OVERALL', new Date())
+  } catch (error) {
+    console.error('Failed to update streak:', error)
+    // Non-critical, continue
+  }
+
+  return {
+    habitId: habit.id,
+    completionId: completion.id,
+    isNew,
+  }
 }
