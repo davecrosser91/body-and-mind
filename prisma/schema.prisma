@@ -82,6 +82,7 @@ model User {
   dailyScores       DailyScore[]
   streaks           Streak[]
   achievements      Achievement[]
+  dailyGoals        DailyGoal[]
 }
 
 model Habit {
@@ -226,4 +227,21 @@ model Quote {
 
   @@index([category])
   @@index([createdAt])
+}
+
+model DailyGoal {
+  id             String   @id @default(cuid())
+  userId         String
+  date           DateTime @db.Date
+  bodyCompleted  Boolean  @default(false)
+  mindCompleted  Boolean  @default(false)
+  bodyActivities String[] // Activity IDs
+  mindActivities String[] // Activity IDs
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
 }
