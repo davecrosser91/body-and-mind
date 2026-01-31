@@ -15,6 +15,23 @@ import { getAllStreaks } from './streaks';
 import { whoopFetch, refreshAccessToken, isTokenExpired, calculateExpiresAt } from './whoop';
 import { WhoopRecovery } from './whoop-sync';
 
+// ============ CONSTANTS ============
+
+/** Base score awarded when a pillar is completed */
+const PILLAR_BASE_SCORE = 50;
+
+/** Bonus score per additional activity completed */
+const PILLAR_ACTIVITY_BONUS = 10;
+
+/** Recovery zone threshold - scores >= this are "green" (well recovered) */
+const RECOVERY_GREEN_THRESHOLD = 67;
+
+/** Recovery zone threshold - scores >= this (but < green) are "yellow" (moderate) */
+const RECOVERY_YELLOW_THRESHOLD = 34;
+
+/** Timeout for Whoop API requests in milliseconds */
+const WHOOP_FETCH_TIMEOUT_MS = 5000;
+
 // ============ TYPES ============
 
 interface CompletedActivity {
@@ -79,8 +96,8 @@ function getHoursRemainingToday(): number {
  * Green >= 67, Yellow >= 34, Red < 34
  */
 function getRecoveryZone(score: number): RecoveryZone {
-  if (score >= 67) return 'green';
-  if (score >= 34) return 'yellow';
+  if (score >= RECOVERY_GREEN_THRESHOLD) return 'green';
+  if (score >= RECOVERY_YELLOW_THRESHOLD) return 'yellow';
   return 'red';
 }
 
@@ -136,7 +153,7 @@ async function getWhoopRecovery(userId: string): Promise<RecoveryStatus | null> 
       }
     }
 
-    // Fetch today's recovery data
+    // Fetch today's recovery data with timeout to prevent blocking
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -150,23 +167,43 @@ async function getWhoopRecovery(userId: string): Promise<RecoveryStatus | null> 
       next_token?: string;
     }
 
-    const response = await whoopFetch<WhoopPaginatedResponse<WhoopRecovery>>(
-      `/developer/v1/recovery?start=${startParam}&end=${endParam}`,
-      accessToken
-    );
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), WHOOP_FETCH_TIMEOUT_MS);
 
-    if (response.records.length === 0) {
-      // Try getting most recent recovery
-      const recentResponse = await whoopFetch<WhoopPaginatedResponse<WhoopRecovery>>(
-        `/developer/v1/recovery?limit=1`,
-        accessToken
+    try {
+      const response = await whoopFetch<WhoopPaginatedResponse<WhoopRecovery>>(
+        `/developer/v1/recovery?start=${startParam}&end=${endParam}`,
+        accessToken,
+        { signal: controller.signal }
       );
 
-      if (recentResponse.records.length === 0) {
-        return null;
+      if (response.records.length === 0) {
+        // Try getting most recent recovery
+        const recentResponse = await whoopFetch<WhoopPaginatedResponse<WhoopRecovery>>(
+          `/developer/v1/recovery?limit=1`,
+          accessToken,
+          { signal: controller.signal }
+        );
+
+        if (recentResponse.records.length === 0) {
+          return null;
+        }
+
+        const recovery = recentResponse.records[0];
+        if (!recovery) return null;
+
+        const score = recovery.score.recovery_score;
+        const zone = getRecoveryZone(score);
+
+        return {
+          score,
+          zone,
+          recommendation: getRecoveryRecommendation(zone),
+        };
       }
 
-      const recovery = recentResponse.records[0];
+      const recovery = response.records[0];
       if (!recovery) return null;
 
       const score = recovery.score.recovery_score;
@@ -177,19 +214,9 @@ async function getWhoopRecovery(userId: string): Promise<RecoveryStatus | null> 
         zone,
         recommendation: getRecoveryRecommendation(zone),
       };
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    const recovery = response.records[0];
-    if (!recovery) return null;
-
-    const score = recovery.score.recovery_score;
-    const zone = getRecoveryZone(score);
-
-    return {
-      score,
-      zone,
-      recommendation: getRecoveryRecommendation(zone),
-    };
   } catch (error) {
     console.error('Error fetching Whoop recovery:', error);
     return null;
@@ -203,8 +230,8 @@ async function getWhoopRecovery(userId: string): Promise<RecoveryStatus | null> 
  */
 function calculatePillarScore(completed: boolean, activityCount: number): number {
   if (!completed) return 0;
-  // Base score of 50 for completion, +10 for each additional activity up to 100
-  return Math.min(100, 50 + activityCount * 10);
+  // Base score for completion, plus bonus for each additional activity up to 100
+  return Math.min(100, PILLAR_BASE_SCORE + activityCount * PILLAR_ACTIVITY_BONUS);
 }
 
 // ============ MAIN FUNCTION ============
@@ -319,6 +346,7 @@ export async function getDailyStatus(userId: string): Promise<DailyStatus> {
 /**
  * Update daily goal record
  * Called when activities are completed to track daily progress
+ * Uses upsert for atomic create-or-update operation
  */
 export async function updateDailyGoal(
   userId: string,
@@ -328,53 +356,45 @@ export async function updateDailyGoal(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const existingGoal = await prisma.dailyGoal.findUnique({
+  // Use upsert for atomic operation, then update array if needed
+  const result = await prisma.dailyGoal.upsert({
     where: {
       userId_date: {
         userId,
         date: today,
       },
     },
+    create: {
+      userId,
+      date: today,
+      bodyCompleted: pillar === 'BODY',
+      mindCompleted: pillar === 'MIND',
+      bodyActivities: pillar === 'BODY' ? [activityId] : [],
+      mindActivities: pillar === 'MIND' ? [activityId] : [],
+    },
+    update: {}, // We'll handle the update separately to manage array deduplication
   });
 
-  if (existingGoal) {
-    // Update existing goal
-    const updateData: {
-      bodyCompleted?: boolean;
-      mindCompleted?: boolean;
-      bodyActivities?: string[];
-      mindActivities?: string[];
-    } = {};
-
-    if (pillar === 'BODY') {
-      const newBodyActivities = existingGoal.bodyActivities.includes(activityId)
-        ? existingGoal.bodyActivities
-        : [...existingGoal.bodyActivities, activityId];
-      updateData.bodyActivities = newBodyActivities;
-      updateData.bodyCompleted = newBodyActivities.length >= 1;
-    } else {
-      const newMindActivities = existingGoal.mindActivities.includes(activityId)
-        ? existingGoal.mindActivities
-        : [...existingGoal.mindActivities, activityId];
-      updateData.mindActivities = newMindActivities;
-      updateData.mindCompleted = newMindActivities.length >= 1;
+  // Check if activity already exists in array and update if needed
+  if (pillar === 'BODY') {
+    if (!result.bodyActivities.includes(activityId)) {
+      await prisma.dailyGoal.update({
+        where: { id: result.id },
+        data: {
+          bodyActivities: { push: activityId },
+          bodyCompleted: true,
+        },
+      });
     }
-
-    await prisma.dailyGoal.update({
-      where: { id: existingGoal.id },
-      data: updateData,
-    });
   } else {
-    // Create new goal
-    await prisma.dailyGoal.create({
-      data: {
-        userId,
-        date: today,
-        bodyCompleted: pillar === 'BODY',
-        mindCompleted: pillar === 'MIND',
-        bodyActivities: pillar === 'BODY' ? [activityId] : [],
-        mindActivities: pillar === 'MIND' ? [activityId] : [],
-      },
-    });
+    if (!result.mindActivities.includes(activityId)) {
+      await prisma.dailyGoal.update({
+        where: { id: result.id },
+        data: {
+          mindActivities: { push: activityId },
+          mindCompleted: true,
+        },
+      });
+    }
   }
 }
