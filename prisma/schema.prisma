@@ -74,6 +74,12 @@ enum Source {
   APPLE_HEALTH
 }
 
+enum CueType {
+  TIME
+  LOCATION
+  AFTER_ACTIVITY
+}
+
 // ============ MODELS ============
 
 model User {
@@ -92,6 +98,7 @@ model User {
   achievements      Achievement[]
   dailyGoals        DailyGoal[]
   weightConfig      WeightConfig?
+  habitStacks       HabitStack[]
 }
 
 model Habit {
@@ -274,4 +281,23 @@ model WeightConfig {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model HabitStack {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  activities  String[] // SubCategory values in order
+  cueType     CueType?
+  cueValue    String?  // Time (HH:mm) or location name
+  isPreset    Boolean  @default(false)
+  presetKey   String?  // e.g., "morning_momentum"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
