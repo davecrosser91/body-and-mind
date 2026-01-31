@@ -12,6 +12,7 @@ interface Habit {
   category: 'FITNESS' | 'MINDFULNESS' | 'NUTRITION' | 'SLEEP' | 'LEARNING'
   frequency: string
   completedToday: boolean
+  habitanimalName: string
 }
 
 export default function HabitsPage() {
@@ -164,7 +165,6 @@ export default function HabitsPage() {
         habits={habits}
         onComplete={handleComplete}
         onUncomplete={handleUncomplete}
-        onAddHabit={() => setShowCreateModal(true)}
       />
 
       {/* Stats */}
@@ -197,7 +197,10 @@ export default function HabitsPage() {
       <CreateHabitModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onSubmit={handleCreateHabit}
+        onCreated={() => {
+          setShowCreateModal(false)
+          fetchHabits()
+        }}
       />
     </div>
   )
