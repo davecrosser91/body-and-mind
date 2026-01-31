@@ -8,3 +8,9 @@ export { HealthChangeAnimation, HealthChangeAnimationStack } from './HealthChang
 export type { HealthChangeAnimationProps } from './HealthChangeAnimation'
 export { LevelUpCelebration, LevelUpNotification } from './LevelUpCelebration'
 export type { LevelUpCelebrationProps } from './LevelUpCelebration'
+export { EvolutionAnimation } from './EvolutionAnimation'
+export type { EvolutionAnimationProps } from './EvolutionAnimation'
+
+// Icon components with evolution stage support
+export { HabitanimalIcon, getAllSpecies, isValidSpecies, speciesColors, speciesAnimals } from './icons'
+export type { HabitanimalIconComponentProps, HabitanimalSpecies, EvolutionStage } from './icons'

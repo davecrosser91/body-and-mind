@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Habit } from '@/types'
+import { HabitanimalIcon, type HabitanimalSpecies } from '@/components/habitanimals/icons'
 
 export type HabitCategory = 'FITNESS' | 'MINDFULNESS' | 'NUTRITION' | 'SLEEP' | 'LEARNING'
 export type HabitFrequency = 'DAILY' | 'WEEKLY' | 'CUSTOM'
@@ -51,13 +52,24 @@ const modalVariants = {
   },
 }
 
-const categoryOptions: { value: HabitCategory; label: string; habitanimal: string; color: string }[] = [
-  { value: 'FITNESS', label: 'Fitness', habitanimal: 'Guiro the Gorilla', color: 'fitness' },
-  { value: 'MINDFULNESS', label: 'Mindfulness', habitanimal: 'Zen the Turtle', color: 'mindfulness' },
-  { value: 'NUTRITION', label: 'Nutrition', habitanimal: 'Greeny the Frog', color: 'nutrition' },
-  { value: 'SLEEP', label: 'Sleep', habitanimal: 'Milo the Cat', color: 'sleep' },
-  { value: 'LEARNING', label: 'Learning', habitanimal: 'Finn the Owl', color: 'learning' },
-]
+// Category info with habitanimal details
+const CATEGORY_INFO: Record<HabitCategory, {
+  label: string
+  habitanimal: string
+  species: HabitanimalSpecies
+  description: string
+}> = {
+  FITNESS: { label: 'Fitness', habitanimal: 'Guiro', species: 'guiro', description: 'Exercise & movement' },
+  MINDFULNESS: { label: 'Mindfulness', habitanimal: 'Zen', species: 'zen', description: 'Meditation & calm' },
+  NUTRITION: { label: 'Nutrition', habitanimal: 'Greeny', species: 'greeny', description: 'Healthy eating' },
+  SLEEP: { label: 'Sleep', habitanimal: 'Milo', species: 'milo', description: 'Rest & recovery' },
+  LEARNING: { label: 'Learning', habitanimal: 'Finn', species: 'finn', description: 'Knowledge & growth' },
+}
+
+const categoryOptions = Object.entries(CATEGORY_INFO).map(([value, info]) => ({
+  value: value as HabitCategory,
+  ...info,
+}))
 
 const frequencyOptions: { value: HabitFrequency; label: string; description: string }[] = [
   { value: 'DAILY', label: 'Daily', description: 'Every day' },
@@ -65,12 +77,12 @@ const frequencyOptions: { value: HabitFrequency; label: string; description: str
   { value: 'CUSTOM', label: 'Custom', description: 'Set your own schedule' },
 ]
 
-const categoryColorMap: Record<HabitCategory, { bg: string; text: string; border: string; ring: string }> = {
-  FITNESS: { bg: 'bg-fitness-50', text: 'text-fitness-600', border: 'border-fitness-500', ring: 'ring-fitness-500' },
-  MINDFULNESS: { bg: 'bg-mindfulness-50', text: 'text-mindfulness-600', border: 'border-mindfulness-500', ring: 'ring-mindfulness-500' },
-  NUTRITION: { bg: 'bg-nutrition-50', text: 'text-nutrition-600', border: 'border-nutrition-500', ring: 'ring-nutrition-500' },
-  SLEEP: { bg: 'bg-sleep-50', text: 'text-sleep-600', border: 'border-sleep-500', ring: 'ring-sleep-500' },
-  LEARNING: { bg: 'bg-learning-50', text: 'text-learning-600', border: 'border-learning-500', ring: 'ring-learning-500' },
+const categoryColorMap: Record<HabitCategory, { bg: string; bgHover: string; text: string; border: string; borderSelected: string; ring: string }> = {
+  FITNESS: { bg: 'bg-fitness-50', bgHover: 'hover:bg-fitness-100', text: 'text-fitness-600', border: 'border-fitness-200', borderSelected: 'border-fitness-500', ring: 'ring-fitness-500' },
+  MINDFULNESS: { bg: 'bg-mindfulness-50', bgHover: 'hover:bg-mindfulness-100', text: 'text-mindfulness-600', border: 'border-mindfulness-200', borderSelected: 'border-mindfulness-500', ring: 'ring-mindfulness-500' },
+  NUTRITION: { bg: 'bg-nutrition-50', bgHover: 'hover:bg-nutrition-100', text: 'text-nutrition-600', border: 'border-nutrition-200', borderSelected: 'border-nutrition-500', ring: 'ring-nutrition-500' },
+  SLEEP: { bg: 'bg-sleep-50', bgHover: 'hover:bg-sleep-100', text: 'text-sleep-600', border: 'border-sleep-200', borderSelected: 'border-sleep-500', ring: 'ring-sleep-500' },
+  LEARNING: { bg: 'bg-learning-50', bgHover: 'hover:bg-learning-100', text: 'text-learning-600', border: 'border-learning-200', borderSelected: 'border-learning-500', ring: 'ring-learning-500' },
 }
 
 interface ValidationErrors {
@@ -107,7 +119,7 @@ export function CreateHabitModal({
     }
   }, [isOpen])
 
-  const selectedCategory = categoryOptions.find(c => c.value === formData.category)
+  const selectedCategoryInfo = CATEGORY_INFO[formData.category]
   const colors = categoryColorMap[formData.category]
 
   const validate = (): boolean => {
@@ -210,7 +222,7 @@ export function CreateHabitModal({
                 <button
                   onClick={handleClose}
                   disabled={isLoading}
-                  className="p-1 text-gray-500 hover:text-gray-700 transition-colors rounded-full hover:bg-gray-100 disabled:opacity-50"
+                  className="p-2 text-gray-500 hover:text-gray-700 transition-colors rounded-full hover:bg-gray-100 disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center -mr-2"
                   aria-label="Close modal"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -259,29 +271,74 @@ export function CreateHabitModal({
                   </AnimatePresence>
                 </div>
 
-                {/* Category Field */}
+                {/* Category Field - Visual Cards */}
                 <div>
-                  <label htmlFor="habit-category" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Category
                   </label>
-                  <select
-                    id="habit-category"
-                    value={formData.category}
-                    onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value as HabitCategory }))}
-                    disabled={isLoading}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
-                      focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-transparent
-                      disabled:bg-gray-50 disabled:cursor-not-allowed
-                      bg-white"
-                  >
-                    {categoryOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {categoryOptions.map((option) => {
+                      const optionColors = categoryColorMap[option.value]
+                      const isSelected = formData.category === option.value
+                      return (
+                        <motion.button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, category: option.value }))}
+                          disabled={isLoading}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className={`relative p-3 rounded-lg border-2 text-left transition-all min-h-[80px]
+                            focus:outline-none focus:ring-2 focus:ring-offset-1 ${optionColors.ring}
+                            disabled:cursor-not-allowed disabled:opacity-50
+                            ${isSelected
+                              ? `${optionColors.bg} ${optionColors.borderSelected}`
+                              : `bg-white ${optionColors.border} ${optionColors.bgHover}`
+                            }
+                          `}
+                        >
+                          {/* Selected indicator */}
+                          {isSelected && (
+                            <motion.div
+                              layoutId="category-selected"
+                              className={`absolute top-1.5 right-1.5 w-4 h-4 rounded-full ${optionColors.text} bg-current flex items-center justify-center`}
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                            >
+                              <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            </motion.div>
+                          )}
 
-                  {/* Habitanimal indicator */}
+                          {/* Habitanimal Icon */}
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <HabitanimalIcon
+                              species={option.species}
+                              mood="happy"
+                              size={28}
+                            />
+                            <span className={`text-xs font-semibold ${optionColors.text}`}>
+                              {option.habitanimal}
+                            </span>
+                          </div>
+
+                          {/* Category name */}
+                          <p className={`text-sm font-medium ${isSelected ? 'text-gray-900' : 'text-gray-700'}`}>
+                            {option.label}
+                          </p>
+
+                          {/* Description */}
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {option.description}
+                          </p>
+                        </motion.button>
+                      )
+                    })}
+                  </div>
+
+                  {/* XP benefit indicator */}
                   <AnimatePresence mode="wait">
                     <motion.div
                       key={formData.category}
@@ -289,16 +346,16 @@ export function CreateHabitModal({
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: 5 }}
                       transition={{ duration: 0.15 }}
-                      className={`mt-2 px-3 py-2 rounded-lg ${colors.bg} border ${colors.border}`}
+                      className={`mt-3 px-3 py-2 rounded-lg ${colors.bg} border ${colors.borderSelected}`}
                     >
                       <div className="flex items-center gap-2">
-                        <div className={`w-6 h-6 rounded-full ${colors.bg} border ${colors.border} flex items-center justify-center`}>
-                          <span className={`text-xs font-medium ${colors.text}`}>
-                            {selectedCategory?.habitanimal.charAt(0)}
-                          </span>
-                        </div>
+                        <HabitanimalIcon
+                          species={selectedCategoryInfo.species}
+                          mood="happy"
+                          size={24}
+                        />
                         <p className={`text-sm ${colors.text}`}>
-                          This habit will benefit <span className="font-medium">{selectedCategory?.habitanimal}</span>
+                          XP will go to <span className="font-semibold">{selectedCategoryInfo.habitanimal}</span>
                         </p>
                       </div>
                     </motion.div>
@@ -336,7 +393,7 @@ export function CreateHabitModal({
                         type="button"
                         onClick={() => setFormData(prev => ({ ...prev, frequency: option.value }))}
                         disabled={isLoading}
-                        className={`px-3 py-2 rounded-lg border text-sm font-medium transition-all
+                        className={`px-3 py-3 rounded-lg border text-sm font-medium transition-all min-h-[44px]
                           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400
                           disabled:cursor-not-allowed
                           ${formData.frequency === option.value
@@ -370,28 +427,28 @@ export function CreateHabitModal({
               </div>
 
               {/* Footer */}
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex-shrink-0">
-                <div className="flex justify-end gap-2">
+              <div className="px-4 sm:px-6 py-4 bg-gray-50 border-t border-gray-100 flex-shrink-0">
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
                   <button
                     type="button"
                     onClick={handleClose}
                     disabled={isLoading}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white
+                    className="px-4 py-3 text-sm font-medium text-gray-700 bg-white
                       border border-gray-200 rounded-lg hover:bg-gray-50
                       focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400
                       disabled:opacity-50 disabled:cursor-not-allowed
-                      transition-colors"
+                      transition-colors min-h-[44px]"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="px-4 py-2 text-sm font-medium text-white bg-gray-900
+                    className="px-4 py-3 text-sm font-medium text-white bg-gray-900
                       rounded-lg hover:bg-gray-800
                       focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-900
                       disabled:opacity-50 disabled:cursor-not-allowed
-                      transition-colors min-w-[100px]"
+                      transition-colors min-w-[100px] min-h-[44px]"
                   >
                     {isLoading ? (
                       <span className="flex items-center justify-center gap-2">

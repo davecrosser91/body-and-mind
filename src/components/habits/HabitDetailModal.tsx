@@ -153,7 +153,7 @@ export function HabitDetailModal({
                 <button
                   onClick={handleClose}
                   disabled={isLoading}
-                  className="p-1 text-gray-500 hover:text-gray-700 transition-colors rounded-full hover:bg-white/50 disabled:opacity-50"
+                  className="p-2 text-gray-500 hover:text-gray-700 transition-colors rounded-full hover:bg-white/50 disabled:opacity-50 min-w-[44px] min-h-[44px] flex items-center justify-center -mr-2"
                   aria-label="Close modal"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -204,30 +204,30 @@ export function HabitDetailModal({
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100">
+            <div className="px-4 sm:px-6 py-4 bg-gray-50 border-t border-gray-100">
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <button
                   onClick={handleClose}
                   disabled={isLoading}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white
+                  className="px-4 py-3 text-sm font-medium text-gray-700 bg-white
                     border border-gray-200 rounded-lg hover:bg-gray-50
                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400
                     disabled:opacity-50 disabled:cursor-not-allowed
-                    transition-colors order-3 sm:order-1"
+                    transition-colors order-3 sm:order-1 min-h-[44px]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleQuickComplete}
                   disabled={isLoading}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white
+                  className="px-4 py-3 text-sm font-medium text-gray-700 bg-white
                     border border-gray-200 rounded-lg hover:bg-gray-50
                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400
                     disabled:opacity-50 disabled:cursor-not-allowed
-                    transition-colors order-2"
+                    transition-colors order-2 min-h-[44px]"
                 >
                   {isLoading ? (
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center justify-center gap-2">
                       <motion.span
                         className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full"
                         animate={{ rotate: 360 }}
@@ -242,10 +242,10 @@ export function HabitDetailModal({
                 <button
                   onClick={handleCompleteWithDetails}
                   disabled={isLoading}
-                  className={`px-4 py-2 text-sm font-medium text-white
+                  className={`px-4 py-3 text-sm font-medium text-white
                     rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2
                     disabled:opacity-50 disabled:cursor-not-allowed
-                    transition-colors order-1 sm:order-3
+                    transition-colors order-1 sm:order-3 min-h-[44px]
                     ${category === 'FITNESS' ? 'bg-fitness-500 hover:bg-fitness-600 focus:ring-fitness-500' : ''}
                     ${category === 'MINDFULNESS' ? 'bg-mindfulness-500 hover:bg-mindfulness-600 focus:ring-mindfulness-500' : ''}
                     ${category === 'NUTRITION' ? 'bg-nutrition-500 hover:bg-nutrition-600 focus:ring-nutrition-500' : ''}
@@ -254,7 +254,7 @@ export function HabitDetailModal({
                   `}
                 >
                   {isLoading ? (
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center justify-center gap-2">
                       <motion.span
                         className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
                         animate={{ rotate: 360 }}

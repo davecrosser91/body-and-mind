@@ -60,7 +60,7 @@ Swagger UI available at `/docs` when running the dev server.
 - ✅ Phase 5: Health System UI (Detail Page, Animations, History)
 - ✅ Phase 6: Auth UI (Login, Signup, Onboarding, Protected Routes)
 - ✅ Phase 7: Whoop Integration (OAuth, Sleep/Workout Sync, Settings)
-- 🔲 Phase 8: Polish & Deploy
+- ✅ Phase 8: Polish & Deploy (Evolution Visuals, Category UI, Responsive, Toasts)
 
 ## License
 
