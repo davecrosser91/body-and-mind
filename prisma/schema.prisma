@@ -51,6 +51,15 @@ enum Frequency {
   CUSTOM
 }
 
+enum QuoteCategory {
+  MOTIVATION
+  CONSISTENCY
+  BODY
+  MIND
+  BALANCE
+  ATOMIC_HABITS
+}
+
 enum Source {
   MANUAL
   WHOOP
@@ -206,4 +215,14 @@ model Achievement {
 
   @@unique([userId, type])
   @@index([userId])
+}
+
+model Quote {
+  id        String        @id @default(cuid())
+  text      String
+  author    String?
+  category  QuoteCategory
+  createdAt DateTime      @default(now())
+
+  @@index([category])
 }
