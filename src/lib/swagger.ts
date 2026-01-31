@@ -764,6 +764,99 @@ export const openApiSpec = {
         },
       },
     },
+    '/habitanimals/{id}/history': {
+      get: {
+        tags: ['Habitanimals'],
+        summary: 'Get habitanimal history',
+        description: 'Get detailed health and XP history for a habitanimal over time',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: 'Habitanimal ID',
+            schema: {
+              type: 'string',
+              format: 'uuid',
+            },
+          },
+          {
+            name: 'days',
+            in: 'query',
+            description: 'Number of days of history to fetch',
+            schema: {
+              type: 'integer',
+              default: 30,
+              minimum: 1,
+              maximum: 365,
+            },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Habitanimal history',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/HabitanimalHistoryResponse',
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+          '404': {
+            description: 'Habitanimal not found',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/habitanimals/recalculate-health': {
+      post: {
+        tags: ['Habitanimals'],
+        summary: 'Recalculate habitanimal health',
+        description: 'Recalculate health for all user habitanimals based on last interaction date',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Health recalculated',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/HealthRecalculationResponse',
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     '/dashboard': {
       get: {
         tags: ['Dashboard'],
@@ -1359,6 +1452,162 @@ export const openApiSpec = {
           },
           hasPreviousPage: {
             type: 'boolean',
+          },
+        },
+      },
+      HabitanimalHistoryResponse: {
+        type: 'object',
+        properties: {
+          success: {
+            type: 'boolean',
+            example: true,
+          },
+          data: {
+            type: 'object',
+            properties: {
+              habitanimalId: {
+                type: 'string',
+                format: 'uuid',
+              },
+              period: {
+                type: 'object',
+                properties: {
+                  start: {
+                    type: 'string',
+                    format: 'date',
+                  },
+                  end: {
+                    type: 'string',
+                    format: 'date',
+                  },
+                  days: {
+                    type: 'integer',
+                  },
+                },
+              },
+              dailyHistory: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    date: {
+                      type: 'string',
+                      format: 'date',
+                    },
+                    health: {
+                      type: 'number',
+                    },
+                    xpEarned: {
+                      type: 'integer',
+                    },
+                    completions: {
+                      type: 'integer',
+                    },
+                  },
+                },
+              },
+              levelMilestones: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    level: {
+                      type: 'integer',
+                    },
+                    date: {
+                      type: 'string',
+                      format: 'date-time',
+                    },
+                  },
+                },
+              },
+              summary: {
+                type: 'object',
+                properties: {
+                  totalXpEarned: {
+                    type: 'integer',
+                  },
+                  totalCompletions: {
+                    type: 'integer',
+                  },
+                  avgCompletionsPerDay: {
+                    type: 'number',
+                  },
+                  avgHealth: {
+                    type: 'number',
+                  },
+                  lowestHealth: {
+                    type: 'number',
+                  },
+                  highestHealth: {
+                    type: 'number',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      HealthRecalculationResponse: {
+        type: 'object',
+        properties: {
+          success: {
+            type: 'boolean',
+            example: true,
+          },
+          data: {
+            type: 'object',
+            properties: {
+              recalculatedAt: {
+                type: 'string',
+                format: 'date-time',
+              },
+              habitanimals: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: {
+                      type: 'string',
+                      format: 'uuid',
+                    },
+                    type: {
+                      type: 'string',
+                    },
+                    name: {
+                      type: 'string',
+                    },
+                    health: {
+                      type: 'number',
+                    },
+                    previousHealth: {
+                      type: 'number',
+                    },
+                    healthChange: {
+                      type: 'number',
+                    },
+                    mood: {
+                      type: 'string',
+                      enum: ['happy', 'neutral', 'tired', 'sad'],
+                    },
+                  },
+                },
+              },
+              summary: {
+                type: 'object',
+                properties: {
+                  total: {
+                    type: 'integer',
+                  },
+                  healthDecayed: {
+                    type: 'integer',
+                  },
+                  healthUnchanged: {
+                    type: 'integer',
+                  },
+                },
+              },
+            },
           },
         },
       },
