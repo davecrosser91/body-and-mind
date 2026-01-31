@@ -134,17 +134,15 @@ export default function InsightsPage() {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <GlassCardStatic className="p-4">
           <p className="text-text-muted text-xs mb-1">Avg Body Score</p>
-          <div className="flex items-center gap-3">
-            <MiniScoreRing score={STATS.avgBodyScore} pillar="body" size={40} />
-            <AnimatedCounter value={STATS.avgBodyScore} className="text-2xl font-bold text-body" />
+          <div className="flex items-center justify-center mt-2">
+            <MiniScoreRing score={STATS.avgBodyScore} pillar="body" size={56} />
           </div>
         </GlassCardStatic>
 
         <GlassCardStatic className="p-4">
           <p className="text-text-muted text-xs mb-1">Avg Mind Score</p>
-          <div className="flex items-center gap-3">
-            <MiniScoreRing score={STATS.avgMindScore} pillar="mind" size={40} />
-            <AnimatedCounter value={STATS.avgMindScore} className="text-2xl font-bold text-mind" />
+          <div className="flex items-center justify-center mt-2">
+            <MiniScoreRing score={STATS.avgMindScore} pillar="mind" size={56} />
           </div>
         </GlassCardStatic>
 
