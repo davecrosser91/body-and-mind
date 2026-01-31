@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 
 export default function DashboardLayout({
@@ -20,6 +21,7 @@ export default function DashboardLayout({
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
+  const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   const handleLogout = () => {
@@ -36,40 +38,74 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   }
 
   const navLinks = [
-    { href: '/habitanimals', label: 'Habitanimals' },
-    { href: '/habits', label: 'Habits' },
-    { href: '/settings', label: 'Settings' },
+    { href: '/dashboard-new', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
+    { href: '/insights', label: 'Insights', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
+    { href: '/habits', label: 'Habits', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
+    { href: '/settings', label: 'Settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
   ]
 
   return (
-    <div className="min-h-screen">
-      <nav className="bg-white border-b border-gray-200 px-4 py-3">
+    <div className="min-h-screen bg-background">
+      {/* Noise overlay */}
+      <div className="fixed inset-0 pointer-events-none opacity-[0.015] z-50">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+          backgroundRepeat: 'repeat',
+        }} />
+      </div>
+
+      <nav className="bg-surface/80 backdrop-blur-xl border-b border-surface-lighter px-4 py-3 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           {/* Logo */}
-          <Link href="/habitanimals" className="text-xl font-bold hover:text-gray-700 transition-colors">
-            Habit Animals
+          <Link href="/dashboard-new" className="flex items-center gap-2 group">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-body to-mind flex items-center justify-center">
+              <svg className="w-5 h-5 text-background" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <span className="text-xl font-bold text-text-primary group-hover:text-body transition-colors">
+              Routine
+            </span>
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-4">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="text-gray-600 hover:text-gray-900 transition-colors min-h-[44px] flex items-center px-2"
-              >
-                {link.label}
-              </Link>
-            ))}
+          <div className="hidden md:flex items-center gap-1">
+            {navLinks.map((link) => {
+              const isActive = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all min-h-[44px]
+                    ${isActive
+                      ? 'bg-surface-lighter text-text-primary'
+                      : 'text-text-muted hover:text-text-secondary hover:bg-surface-light'
+                    }
+                  `}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d={link.icon} />
+                  </svg>
+                  <span className="text-sm font-medium">{link.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* User Menu */}
+          <div className="hidden md:flex items-center gap-3">
             {user && (
-              <span className="text-sm text-gray-500 hidden lg:block">
+              <span className="text-sm text-text-muted hidden lg:block">
                 {user.name || user.email}
               </span>
             )}
             <button
               onClick={handleLogout}
-              className="text-sm text-gray-600 hover:text-gray-900 transition-colors min-h-[44px] min-w-[44px] flex items-center px-2"
+              className="text-sm text-text-muted hover:text-text-primary px-3 py-2 rounded-lg hover:bg-surface-light transition-colors min-h-[44px] min-w-[44px] flex items-center"
             >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+              </svg>
               Logout
             </button>
           </div>
@@ -77,7 +113,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           {/* Mobile Menu Button */}
           <button
             onClick={toggleMobileMenu}
-            className="md:hidden p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+            className="md:hidden p-2 text-text-muted hover:text-text-primary hover:bg-surface-light rounded-lg transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={isMobileMenuOpen}
           >
@@ -101,31 +137,45 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               transition={{ duration: 0.2 }}
               className="md:hidden overflow-hidden"
             >
-              <div className="pt-4 pb-2 space-y-1 border-t border-gray-100 mt-3">
+              <div className="pt-4 pb-2 space-y-1 border-t border-surface-lighter mt-3">
                 {/* User info on mobile */}
                 {user && (
-                  <div className="px-3 py-2 text-sm text-gray-500 border-b border-gray-100 mb-2">
+                  <div className="px-3 py-2 text-sm text-text-muted border-b border-surface-lighter mb-2">
                     Signed in as {user.name || user.email}
                   </div>
                 )}
 
-                {navLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={closeMobileMenu}
-                    className="block px-3 py-3 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors min-h-[44px]"
-                  >
-                    {link.label}
-                  </Link>
-                ))}
+                {navLinks.map((link) => {
+                  const isActive = pathname === link.href;
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={closeMobileMenu}
+                      className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors min-h-[44px]
+                        ${isActive
+                          ? 'bg-surface-lighter text-text-primary'
+                          : 'text-text-muted hover:text-text-secondary hover:bg-surface-light'
+                        }
+                      `}
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d={link.icon} />
+                      </svg>
+                      {link.label}
+                    </Link>
+                  );
+                })}
                 <button
                   onClick={() => {
                     closeMobileMenu()
                     handleLogout()
                   }}
-                  className="w-full text-left px-3 py-3 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors min-h-[44px]"
+                  className="w-full flex items-center gap-3 px-3 py-3 text-text-muted hover:text-text-primary hover:bg-surface-light rounded-lg transition-colors min-h-[44px]"
                 >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                  </svg>
                   Logout
                 </button>
               </div>

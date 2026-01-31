@@ -1,4 +1,11 @@
-// Habit Components
+// New Body + Mind components
+export { HabitCard } from './HabitCard'
+export { HabitListNew } from './HabitListNew'
+export type { HabitNew } from './HabitListNew'
+export { CreateHabitModalNew } from './CreateHabitModalNew'
+export type { CreateHabitFormData as CreateHabitFormDataNew } from './CreateHabitModalNew'
+
+// Legacy components (for backward compatibility)
 export { HabitList } from './HabitList'
 export type { Habit } from './HabitList'
 

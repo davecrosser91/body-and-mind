@@ -9,6 +9,7 @@ datasource db {
 
 // ============ ENUMS ============
 
+// Legacy - kept for backward compatibility during migration
 enum Category {
   FITNESS
   MINDFULNESS
@@ -23,6 +24,25 @@ enum HabitanimalType {
   NUTRITION    // Greeny the Ox
   SLEEP        // Milo the Sloth
   LEARNING     // Finn the Fox
+}
+
+// NEW: Body + Mind pillars
+enum Pillar {
+  BODY
+  MIND
+}
+
+// NEW: Sub-categories within each pillar
+enum SubCategory {
+  // Body pillar
+  TRAINING
+  SLEEP
+  NUTRITION
+  // Mind pillar
+  MEDITATION
+  READING
+  LEARNING
+  JOURNALING
 }
 
 enum Frequency {
@@ -50,24 +70,30 @@ model User {
   habits            Habit[]
   habitanimals      Habitanimal[]
   whoopConnection   WhoopConnection?
+  dailyScores       DailyScore[]
+  streaks           Streak[]
+  achievements      Achievement[]
 }
 
 model Habit {
-  id          String    @id @default(cuid())
+  id          String       @id @default(cuid())
   name        String
-  category    Category
-  frequency   Frequency @default(DAILY)
+  category    Category     // Legacy - kept for backward compatibility
+  pillar      Pillar?      // NEW: BODY or MIND
+  subCategory SubCategory? // NEW: specific category within pillar
+  frequency   Frequency    @default(DAILY)
   description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  archived    Boolean   @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  archived    Boolean      @default(false)
 
   userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   completions HabitCompletion[]
 
   @@index([userId])
+  @@index([pillar])
 }
 
 model HabitCompletion {
@@ -114,4 +140,70 @@ model WhoopConnection {
 
   userId        String    @unique
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============ NEW MODELS FOR BODY + MIND SYSTEM ============
+
+model DailyScore {
+  id        String   @id @default(cuid())
+  date      DateTime @db.Date
+
+  // Main scores (0-100)
+  bodyScore      Int
+  mindScore      Int
+  balanceIndex   Int
+
+  // Body sub-scores
+  trainingScore  Int?
+  sleepScore     Int?
+  nutritionScore Int?
+
+  // Mind sub-scores
+  meditationScore Int?
+  readingScore    Int?
+  learningScore   Int?
+
+  // Whoop data snapshot (for reference)
+  whoopStrain    Float?
+  whoopSleep     Float?
+  whoopRecovery  Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+}
+
+model Streak {
+  id        String   @id @default(cuid())
+  pillarKey String   // "BODY", "MIND", or "OVERALL"
+  current   Int      @default(0)
+  longest   Int      @default(0)
+  lastActiveDate DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pillarKey])
+  @@index([userId])
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  type        String   // e.g., "streak_7", "streak_30", "perfect_balance", "first_workout"
+  unlockedAt  DateTime @default(now())
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId])
 }
