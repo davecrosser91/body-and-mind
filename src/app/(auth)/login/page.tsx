@@ -53,7 +53,7 @@ export default function LoginPage() {
       // Check if onboarding is complete
       const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY)
       if (onboardingComplete) {
-        router.push('/habitanimals')
+        router.push('/dashboard')
       } else {
         router.push('/onboarding')
       }

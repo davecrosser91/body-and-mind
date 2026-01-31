@@ -9,7 +9,8 @@ const WHOOP_AUTH_URL = 'https://api.prod.whoop.com/oauth/oauth2/auth'
 const WHOOP_TOKEN_URL = 'https://api.prod.whoop.com/oauth/oauth2/token'
 
 // Scopes needed for the integration
-const WHOOP_SCOPES = ['read:profile', 'read:sleep', 'read:workout', 'read:recovery']
+// 'offline' scope is required to get a refresh_token
+const WHOOP_SCOPES = ['read:profile', 'read:sleep', 'read:workout', 'read:recovery', 'offline']
 
 export interface WhoopApiError {
   error: string
@@ -69,6 +70,9 @@ export interface WhoopTokenResponse {
 export async function exchangeCodeForTokens(code: string): Promise<WhoopTokenResponse> {
   const { clientId, clientSecret, redirectUri } = getWhoopConfig()
 
+  console.log('Whoop token exchange: Using redirect_uri:', redirectUri)
+  console.log('Whoop token exchange: Using client_id:', clientId)
+
   const params = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
@@ -87,8 +91,9 @@ export async function exchangeCodeForTokens(code: string): Promise<WhoopTokenRes
 
   if (!response.ok) {
     const errorText = await response.text()
-    console.error('Whoop token exchange failed:', errorText)
-    throw new Error(`Failed to exchange code for tokens: ${response.status}`)
+    console.error('Whoop token exchange failed. Status:', response.status)
+    console.error('Whoop token exchange error response:', errorText)
+    throw new Error(`Failed to exchange code for tokens: ${response.status} - ${errorText}`)
   }
 
   return response.json()

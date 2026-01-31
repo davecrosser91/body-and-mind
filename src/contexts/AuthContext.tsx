@@ -50,7 +50,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       const data = await response.json()
-      return data.user
+      return data.data
     } catch {
       return null
     }
@@ -94,7 +94,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const data = await response.json()
-    const { token: newToken, user: newUser } = data
+    const { token: newToken, user: newUser } = data.data
 
     localStorage.setItem(TOKEN_KEY, newToken)
     setToken(newToken)
@@ -116,7 +116,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const data = await response.json()
-    const { token: newToken, user: newUser } = data
+    const { token: newToken, user: newUser } = data.data
 
     localStorage.setItem(TOKEN_KEY, newToken)
     setToken(newToken)
@@ -149,7 +149,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     const responseData = await response.json()
-    setUser(responseData.user)
+    setUser(responseData.data)
   }, [token])
 
   const value: AuthContextType = {

@@ -247,7 +247,7 @@ export default function OnboardingPage() {
   useEffect(() => {
     const completed = localStorage.getItem(ONBOARDING_COMPLETE_KEY)
     if (completed) {
-      router.replace('/habitanimals')
+      router.replace('/dashboard')
     }
   }, [router])
 
@@ -267,7 +267,7 @@ export default function OnboardingPage() {
 
   const handleComplete = () => {
     localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true')
-    router.push('/habitanimals')
+    router.push('/dashboard')
   }
 
   const renderStep = () => {

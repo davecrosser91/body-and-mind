@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 
 interface WhoopStatus {
   connected: boolean
-  lastSyncAt: string | null
+  lastSync: string | null
 }
 
 /**
@@ -81,12 +81,12 @@ export default function SettingsPage() {
 
       if (response.ok) {
         const data = await response.json()
-        setWhoopStatus(data)
+        setWhoopStatus(data.data)
       } else {
-        setWhoopStatus({ connected: false, lastSyncAt: null })
+        setWhoopStatus({ connected: false, lastSync: null })
       }
     } catch {
-      setWhoopStatus({ connected: false, lastSyncAt: null })
+      setWhoopStatus({ connected: false, lastSync: null })
     } finally {
       setIsLoadingWhoop(false)
     }
@@ -143,8 +143,8 @@ export default function SettingsPage() {
 
       if (response.ok) {
         const data = await response.json()
-        if (data.authUrl) {
-          window.location.href = data.authUrl
+        if (data.data?.authorizationUrl) {
+          window.location.href = data.data.authorizationUrl
         }
       } else {
         setNotification({
@@ -180,7 +180,7 @@ export default function SettingsPage() {
           type: 'success',
           message: 'Whoop data synced successfully!',
         })
-        // Refresh status to get new lastSyncAt
+        // Refresh status to get new lastSync
         await fetchWhoopStatus()
       } else {
         setNotification({
@@ -212,7 +212,7 @@ export default function SettingsPage() {
       })
 
       if (response.ok) {
-        setWhoopStatus({ connected: false, lastSyncAt: null })
+        setWhoopStatus({ connected: false, lastSync: null })
         setNotification({
           type: 'success',
           message: 'Whoop disconnected successfully.',
@@ -353,9 +353,9 @@ export default function SettingsPage() {
                   <p className="text-sm text-gray-500 mt-0.5">
                     Sync your sleep and workout data automatically
                   </p>
-                  {whoopStatus?.connected && whoopStatus.lastSyncAt && (
+                  {whoopStatus?.connected && whoopStatus.lastSync && (
                     <p className="text-xs text-gray-400 mt-1">
-                      Last synced: {formatRelativeTime(whoopStatus.lastSyncAt)}
+                      Last synced: {formatRelativeTime(whoopStatus.lastSync)}
                     </p>
                   )}
                 </div>

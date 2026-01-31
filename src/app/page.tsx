@@ -12,7 +12,7 @@ export default function Home() {
   useEffect(() => {
     if (!isLoading) {
       if (isAuthenticated) {
-        router.replace('/habitanimals')
+        router.replace('/dashboard')
       } else {
         router.replace('/login')
       }

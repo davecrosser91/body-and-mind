@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Card } from '@/components/ui/Card'
@@ -104,10 +104,9 @@ const moodDescription: Record<MoodType, string> = {
 export default function HabitanimalDetailPage({
   params,
 }: {
-  params: Promise<{ id: string }>
+  params: { id: string }
 }) {
   const router = useRouter()
-  const resolvedParams = use(params)
   const [habitanimal, setHabitanimal] = useState<HabitanimalDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -115,7 +114,7 @@ export default function HabitanimalDetailPage({
   useEffect(() => {
     async function fetchHabitanimal() {
       try {
-        const response = await fetch(`/api/v1/habitanimals/${resolvedParams.id}`)
+        const response = await fetch(`/api/v1/habitanimals/${params.id}`)
         if (!response.ok) {
           if (response.status === 404) {
             setError('Habitanimal not found')
@@ -134,7 +133,7 @@ export default function HabitanimalDetailPage({
     }
 
     fetchHabitanimal()
-  }, [resolvedParams.id])
+  }, [params.id])
 
   if (loading) {
     return (

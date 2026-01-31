@@ -65,12 +65,15 @@ export async function GET(request: NextRequest) {
 
   try {
     // Exchange authorization code for tokens
+    console.log('Whoop callback: Exchanging code for tokens...')
     const tokens = await exchangeCodeForTokens(code)
+    console.log('Whoop callback: Token exchange successful')
 
     // Calculate expiration date
     const expiresAt = calculateExpiresAt(tokens.expires_in)
 
     // Upsert WhoopConnection (create or update)
+    console.log('Whoop callback: Saving connection for user:', userId)
     await prisma.whoopConnection.upsert({
       where: { userId },
       create: {
@@ -86,13 +89,15 @@ export async function GET(request: NextRequest) {
         updatedAt: new Date(),
       },
     })
+    console.log('Whoop callback: Connection saved successfully')
 
     // Redirect to settings with success
     const redirectUrl = new URL('/settings', request.url)
     redirectUrl.searchParams.set('whoop', 'connected')
     return NextResponse.redirect(redirectUrl)
   } catch (err) {
-    console.error('Whoop token exchange error:', err)
+    console.error('Whoop callback error:', err)
+    console.error('Whoop callback error details:', JSON.stringify(err, Object.getOwnPropertyNames(err)))
     const redirectUrl = new URL('/settings', request.url)
     redirectUrl.searchParams.set('whoop', 'error')
     redirectUrl.searchParams.set('message', 'Failed to complete authentication')
