@@ -55,6 +55,7 @@ export async function getRandomQuote(
     const quote = await prisma.quote.findFirst({
       where: whereClause,
       skip: randomIndex,
+      orderBy: { createdAt: 'asc' },
     })
 
     if (!quote) {
@@ -103,6 +104,7 @@ export async function getDailyQuote(userId: string): Promise<QuoteResult> {
     const quoteIndex = hash % count
     const quote = await prisma.quote.findFirst({
       skip: quoteIndex,
+      orderBy: { createdAt: 'asc' },
     })
 
     if (!quote) {

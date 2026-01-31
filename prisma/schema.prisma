@@ -225,4 +225,5 @@ model Quote {
   createdAt DateTime      @default(now())
 
   @@index([category])
+  @@index([createdAt])
 }
