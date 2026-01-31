@@ -38,6 +38,9 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
             <Link href="/habits" className="text-gray-600 hover:text-gray-900">
               Habits
             </Link>
+            <Link href="/settings" className="text-gray-600 hover:text-gray-900">
+              Settings
+            </Link>
             {user && (
               <span className="text-sm text-gray-500">
                 {user.name || user.email}

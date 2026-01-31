@@ -1098,6 +1098,107 @@ export const openApiSpec = {
         },
       },
     },
+    '/integrations/whoop': {
+      get: {
+        tags: ['Integrations'],
+        summary: 'Get WHOOP connection status',
+        description: 'Check if WHOOP is connected and get last sync time',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Connection status',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/WhoopConnectionStatus',
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ['Integrations'],
+        summary: 'Disconnect WHOOP',
+        description: 'Remove WHOOP integration',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '204': {
+            description: 'Disconnected successfully',
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+          '404': {
+            description: 'No WHOOP connection found',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/integrations/whoop/sync': {
+      post: {
+        tags: ['Integrations'],
+        summary: 'Sync WHOOP data',
+        description: 'Manually trigger sync of sleep and workout data from WHOOP',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Sync completed',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/WhoopSyncResponse',
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+          '404': {
+            description: 'No WHOOP connection found',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   },
   components: {
     securitySchemes: {
@@ -1782,6 +1883,79 @@ export const openApiSpec = {
                   healthUnchanged: {
                     type: 'integer',
                   },
+                },
+              },
+            },
+          },
+        },
+      },
+      WhoopConnectionStatus: {
+        type: 'object',
+        properties: {
+          success: {
+            type: 'boolean',
+            example: true,
+          },
+          data: {
+            type: 'object',
+            properties: {
+              connected: {
+                type: 'boolean',
+              },
+              lastSync: {
+                type: 'string',
+                format: 'date-time',
+                nullable: true,
+              },
+              expiresAt: {
+                type: 'string',
+                format: 'date-time',
+                nullable: true,
+              },
+              connectedAt: {
+                type: 'string',
+                format: 'date-time',
+              },
+            },
+          },
+        },
+      },
+      WhoopSyncResponse: {
+        type: 'object',
+        properties: {
+          success: {
+            type: 'boolean',
+            example: true,
+          },
+          data: {
+            type: 'object',
+            properties: {
+              sleepSynced: {
+                type: 'integer',
+                description: 'Number of sleep records synced',
+              },
+              workoutsSynced: {
+                type: 'integer',
+                description: 'Number of workout records synced',
+              },
+              xpEarned: {
+                type: 'object',
+                properties: {
+                  sleep: {
+                    type: 'integer',
+                  },
+                  fitness: {
+                    type: 'integer',
+                  },
+                  total: {
+                    type: 'integer',
+                  },
+                },
+              },
+              errors: {
+                type: 'array',
+                items: {
+                  type: 'string',
                 },
               },
             },
