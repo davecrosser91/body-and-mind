@@ -162,6 +162,129 @@ export const openApiSpec = {
         },
       },
     },
+    '/auth/logout': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Logout',
+        description: 'Logout the current user (client should remove stored token)',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Logout successful',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: {
+                      type: 'boolean',
+                      example: true,
+                    },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        message: {
+                          type: 'string',
+                          example: 'Logged out successfully',
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/auth/me': {
+      get: {
+        tags: ['Auth'],
+        summary: 'Get current user',
+        description: 'Get the profile of the currently authenticated user',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': {
+            description: 'User profile',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/UserProfileResponse',
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+        },
+      },
+      patch: {
+        tags: ['Auth'],
+        summary: 'Update profile',
+        description: 'Update the current user profile. Can update name and/or password.',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                $ref: '#/components/schemas/UpdateProfileRequest',
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Profile updated',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/UserProfileResponse',
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation error',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized or invalid current password',
+            content: {
+              'application/json': {
+                schema: {
+                  $ref: '#/components/schemas/ErrorResponse',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
     '/habits': {
       get: {
         tags: ['Habits'],
@@ -1064,6 +1187,60 @@ export const openApiSpec = {
           createdAt: {
             type: 'string',
             format: 'date-time',
+          },
+        },
+      },
+      UserProfileResponse: {
+        type: 'object',
+        properties: {
+          success: {
+            type: 'boolean',
+            example: true,
+          },
+          data: {
+            type: 'object',
+            properties: {
+              id: {
+                type: 'string',
+                format: 'uuid',
+              },
+              email: {
+                type: 'string',
+                format: 'email',
+              },
+              name: {
+                type: 'string',
+                nullable: true,
+              },
+              createdAt: {
+                type: 'string',
+                format: 'date-time',
+              },
+              habitanimalCount: {
+                type: 'integer',
+                example: 5,
+              },
+            },
+          },
+        },
+      },
+      UpdateProfileRequest: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 100,
+            nullable: true,
+          },
+          currentPassword: {
+            type: 'string',
+            description: 'Required when changing password',
+          },
+          newPassword: {
+            type: 'string',
+            minLength: 8,
+            description: 'Must contain uppercase, lowercase, and number',
           },
         },
       },
