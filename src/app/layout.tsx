@@ -4,8 +4,8 @@ import { ToastProvider } from '@/contexts/ToastContext'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Habit Animals',
-  description: 'Gamify your daily habits with Habitanimal companions',
+  title: 'BODY & MIND',
+  description: 'Every day, do something for your Body and Mind',
 }
 
 export default function RootLayout({

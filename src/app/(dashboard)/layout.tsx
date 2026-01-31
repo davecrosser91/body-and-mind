@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
+import { Logo } from '@/components/ui/Logo'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -57,15 +58,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       <nav className="bg-surface/80 backdrop-blur-xl border-b border-surface-lighter px-4 py-3 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-body to-mind flex items-center justify-center">
-              <svg className="w-5 h-5 text-background" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <span className="text-xl font-bold text-text-primary group-hover:text-body transition-colors">
-              Routine
-            </span>
+          <Link href="/dashboard">
+            <Logo size={32} showText={true} />
           </Link>
 
           {/* Desktop Navigation */}
