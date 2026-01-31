@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ ENUMS ============
+
+enum Category {
+  FITNESS
+  MINDFULNESS
+  NUTRITION
+  SLEEP
+  LEARNING
+}
+
+enum HabitanimalType {
+  FITNESS      // Guiro the Gorilla
+  MINDFULNESS  // Zen the Turtle
+  NUTRITION    // Greeny the Ox
+  SLEEP        // Milo the Sloth
+  LEARNING     // Finn the Fox
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+  CUSTOM
+}
+
+enum Source {
+  MANUAL
+  WHOOP
+  APPLE_HEALTH
+}
+
+// ============ MODELS ============
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  habits            Habit[]
+  habitanimals      Habitanimal[]
+  whoopConnection   WhoopConnection?
+}
+
+model Habit {
+  id          String    @id @default(cuid())
+  name        String
+  category    Category
+  frequency   Frequency @default(DAILY)
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  archived    Boolean   @default(false)
+
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  completions HabitCompletion[]
+
+  @@index([userId])
+}
+
+model HabitCompletion {
+  id          String    @id @default(cuid())
+  completedAt DateTime  @default(now())
+  details     String?
+  xpEarned    Int
+  source      Source    @default(MANUAL)
+
+  habitId     String
+  habit       Habit     @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@index([habitId])
+  @@index([completedAt])
+}
+
+model Habitanimal {
+  id              String          @id @default(cuid())
+  type            HabitanimalType
+  species         String          // "gorilla", "turtle", "ox", "sloth", "fox"
+  name            String          // "Guiro", "Zen", "Greeny", "Milo", "Finn"
+  level           Int             @default(1)
+  xp              Int             @default(0)
+  health          Int             @default(100)
+  evolutionStage  Int             @default(1)
+  lastInteraction DateTime        @default(now())
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model WhoopConnection {
+  id            String    @id @default(cuid())
+  accessToken   String
+  refreshToken  String
+  expiresAt     DateTime
+  lastSync      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

@@ -1,50 +1,83 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# Routine Game Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. User-First Design
+Every decision prioritizes User Experience over technical elegance. The app must feel intuitive, fast, and emotionally engaging. If a technically "correct" solution hurts UX, we choose the user-friendly alternative.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Atomic Habits Aligned
+All features must support James Clear's 4 Laws of Behavior Change:
+- **Make it Obvious** — Clear cues, visible progress, dashboard-first
+- **Make it Attractive** — Habitanimal companions, evolution rewards, visual feedback
+- **Make it Easy** — Minimal friction, quick check-ins, smart defaults
+- **Make it Satisfying** — Immediate rewards, habitanimal reactions, XP gains
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+The "Never Miss Twice" philosophy replaces punitive streak systems.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### III. YAGNI (You Aren't Gonna Need It)
+Build only what's necessary for MVP. No speculative features, no "nice-to-haves", no premature optimization. Every feature must justify its existence against the MVP scope.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### IV. Test-Driven for Critical Paths
+Critical flows require tests before implementation:
+- Habit tracking & completion logic
+- XP calculation & leveling
+- Habitanimal health state machine
+- Whoop API integration
+- User authentication
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+Non-critical UI can be tested manually.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### V. Extensibility by Design
+Architecture must allow additions without rewrites:
+- New Habitanimal types without core changes
+- New Habit categories without schema migrations
+- New integrations (Apple Health, Strava) without API redesign
+- New evolution stages without progression system changes
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Tech Standards
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### Frontend
+- Minimalist, flat design aesthetic
+- Mobile-responsive web-first
+- Fast load times (<3s initial, <1s interactions)
+- Accessible (WCAG 2.1 AA minimum)
+
+### Backend
+- RESTful API design
+- Stateless where possible
+- Clear separation: Auth, Habits, Habitanimals, Integrations
+- Whoop API as primary external dependency for V1
+
+### Data
+- User owns their data
+- Privacy-first (minimal data collection)
+- Secure credential storage for integrations
+
+## Development Workflow
+
+### Branching
+- `main` — production-ready code
+- `develop` — integration branch
+- `feature/*` — individual features
+- `fix/*` — bug fixes
+
+### Code Quality
+- Code review required for main/develop merges
+- Linting enforced
+- TypeScript strict mode (if using TS)
+
+### Documentation
+- README updated with setup instructions
+- API endpoints documented
+- Habitanimal/Habit system documented for future contributors
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution guides all development decisions. When in doubt:
+1. Check if it serves the user (Principle I)
+2. Check if it aligns with Atomic Habits (Principle II)
+3. Check if it's truly needed for MVP (Principle III)
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+Amendments require documented reasoning and updating this file.
+
+**Version**: 1.0.0 | **Ratified**: 2025-01-30 | **Last Amended**: 2025-01-30
