@@ -32,18 +32,7 @@ enum Pillar {
   MIND
 }
 
-// NEW: Sub-categories within each pillar
-enum SubCategory {
-  // Body pillar
-  TRAINING
-  SLEEP
-  NUTRITION
-  // Mind pillar
-  MEDITATION
-  READING
-  LEARNING
-  JOURNALING
-}
+// SubCategory enum DELETED - now using String for custom subcategories
 
 enum Frequency {
   DAILY
@@ -90,7 +79,7 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  habits            Habit[]
+  activities        Activity[]
   habitanimals      Habitanimal[]
   whoopConnection   WhoopConnection?
   dailyScores       DailyScore[]
@@ -101,14 +90,17 @@ model User {
   habitStacks       HabitStack[]
 }
 
-model Habit {
+model Activity {
   id          String       @id @default(cuid())
   name        String
-  category    Category     // Legacy - kept for backward compatibility
-  pillar      Pillar?      // NEW: BODY or MIND
-  subCategory SubCategory? // NEW: specific category within pillar
+  pillar      Pillar
+  subCategory String       // Changed from enum to string for custom subcategories
   frequency   Frequency    @default(DAILY)
   description String?
+  points      Int          @default(25)
+  isHabit     Boolean      @default(true)  // true = recurring habit
+  cueType     CueType?
+  cueValue    String?
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   archived    Boolean      @default(false)
@@ -116,23 +108,24 @@ model Habit {
   userId      String
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  completions HabitCompletion[]
+  completions ActivityCompletion[]
 
   @@index([userId])
   @@index([pillar])
+  @@index([subCategory])
 }
 
-model HabitCompletion {
-  id          String    @id @default(cuid())
-  completedAt DateTime  @default(now())
-  details     String?
-  xpEarned    Int
-  source      Source    @default(MANUAL)
+model ActivityCompletion {
+  id           String    @id @default(cuid())
+  completedAt  DateTime  @default(now())
+  pointsEarned Int       // snapshot of points at completion
+  details      String?
+  source       Source    @default(MANUAL)
 
-  habitId     String
-  habit       Habit     @relation(fields: [habitId], references: [id], onDelete: Cascade)
+  activityId   String
+  activity     Activity  @relation(fields: [activityId], references: [id], onDelete: Cascade)
 
-  @@index([habitId])
+  @@index([activityId])
   @@index([completedAt])
 }
 
@@ -178,6 +171,12 @@ model DailyScore {
   bodyScore      Int
   mindScore      Int
   balanceIndex   Int
+
+  // Points tracking
+  bodyPoints     Int       @default(0)
+  mindPoints     Int       @default(0)
+  bodyComplete   Boolean   @default(false)
+  mindComplete   Boolean   @default(false)
 
   // Body sub-scores
   trainingScore  Int?
@@ -288,16 +287,33 @@ model HabitStack {
   userId      String
   name        String
   description String?
-  activities  String[] // SubCategory values in order
+  activityIds String[] // Activity IDs in order (the actual activities)
   cueType     CueType?
   cueValue    String?  // Time (HH:mm) or location name
   isPreset    Boolean  @default(false)
-  presetKey   String?  // e.g., "morning_momentum"
+  presetKey   String?  // e.g., "morning_momentum" - presets are templates, user copies them
   isActive    Boolean  @default(true)
+  completionBonus Int  @default(20) // Bonus percentage when stack completed in order
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  completions StackCompletion[]
 
   @@index([userId])
+}
+
+model StackCompletion {
+  id                String   @id @default(cuid())
+  stackId           String
+  date              DateTime @db.Date
+  completedAt       DateTime @default(now())
+  bonusPointsEarned Int      @default(0)
+  streakDay         Int      @default(1) // Which day of the streak this is
+
+  stack HabitStack @relation(fields: [stackId], references: [id], onDelete: Cascade)
+
+  @@unique([stackId, date])
+  @@index([stackId])
+  @@index([date])
 }
