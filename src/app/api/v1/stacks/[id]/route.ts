@@ -8,17 +8,10 @@ import {
   internalError,
 } from '@/lib/api-response';
 import { getStackById, updateStack, deleteStack } from '@/lib/habit-stacks';
-import { CueType, SubCategory } from '@prisma/client';
+import { CueType } from '@prisma/client';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
-}
-
-/**
- * Validate that a string is a valid SubCategory enum value
- */
-function isValidSubCategory(value: string): value is SubCategory {
-  return Object.values(SubCategory).includes(value as SubCategory);
 }
 
 /**
@@ -55,17 +48,22 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     return successResponse({
-      id: stack.id,
-      name: stack.name,
-      description: stack.description,
-      activities: stack.activities,
-      cueType: stack.cueType,
-      cueValue: stack.cueValue,
-      isPreset: stack.isPreset,
-      presetKey: stack.presetKey,
-      isActive: stack.isActive,
-      createdAt: stack.createdAt,
-      updatedAt: stack.updatedAt,
+      stack: {
+        id: stack.id,
+        name: stack.name,
+        description: stack.description,
+        activityIds: stack.activityIds,
+        activities: stack.activities,
+        cueType: stack.cueType,
+        cueValue: stack.cueValue,
+        isPreset: stack.isPreset,
+        presetKey: stack.presetKey,
+        isActive: stack.isActive,
+        completionBonus: stack.completionBonus,
+        currentStreak: stack.currentStreak,
+        createdAt: stack.createdAt,
+        updatedAt: stack.updatedAt,
+      },
     });
   } catch (error) {
     console.error('Stack fetch error:', error);
@@ -102,22 +100,20 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       }
     }
 
-    // Validate activities if provided
-    if (body.activities !== undefined) {
-      if (!Array.isArray(body.activities)) {
-        return badRequestError('Activities must be an array');
+    // Validate activityIds if provided
+    if (body.activityIds !== undefined) {
+      if (!Array.isArray(body.activityIds)) {
+        return badRequestError('activityIds must be an array');
       }
 
-      if (body.activities.length < 2) {
+      if (body.activityIds.length < 2) {
         return badRequestError('A habit stack must have at least 2 activities');
       }
 
-      // Validate all activities are valid SubCategory values
-      for (const activity of body.activities) {
-        if (typeof activity !== 'string' || !isValidSubCategory(activity)) {
-          return badRequestError(
-            `Invalid activity: ${activity}. Must be one of: ${Object.values(SubCategory).join(', ')}`
-          );
+      // Validate all activityIds are strings
+      for (const activityId of body.activityIds) {
+        if (typeof activityId !== 'string') {
+          return badRequestError('All activityIds must be strings');
         }
       }
     }
@@ -132,7 +128,6 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
 
     // Validate cueValue based on cueType
-    // If cueType is being set, cueValue needs validation
     if (body.cueType !== undefined && body.cueType !== null) {
       if (body.cueType === CueType.TIME) {
         if (body.cueValue !== undefined && body.cueValue !== null) {
@@ -165,14 +160,22 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       return badRequestError('isActive must be a boolean');
     }
 
+    // Validate completionBonus if provided
+    if (body.completionBonus !== undefined) {
+      if (typeof body.completionBonus !== 'number' || body.completionBonus < 0 || body.completionBonus > 100) {
+        return badRequestError('completionBonus must be a number between 0 and 100');
+      }
+    }
+
     // Build update input
     const updateInput: {
       name?: string;
       description?: string | null;
-      activities?: SubCategory[];
+      activityIds?: string[];
       cueType?: CueType | null;
       cueValue?: string | null;
       isActive?: boolean;
+      completionBonus?: number;
     } = {};
 
     if (body.name !== undefined) {
@@ -181,8 +184,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if (body.description !== undefined) {
       updateInput.description = body.description === null ? null : body.description.trim();
     }
-    if (body.activities !== undefined) {
-      updateInput.activities = body.activities as SubCategory[];
+    if (body.activityIds !== undefined) {
+      updateInput.activityIds = body.activityIds;
     }
     if (body.cueType !== undefined) {
       updateInput.cueType = body.cueType as CueType | null;
@@ -193,6 +196,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if (body.isActive !== undefined) {
       updateInput.isActive = body.isActive;
     }
+    if (body.completionBonus !== undefined) {
+      updateInput.completionBonus = body.completionBonus;
+    }
 
     // Update the stack
     const updatedStack = await updateStack(user.id, stackId, updateInput);
@@ -202,17 +208,22 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
 
     return successResponse({
-      id: updatedStack.id,
-      name: updatedStack.name,
-      description: updatedStack.description,
-      activities: updatedStack.activities,
-      cueType: updatedStack.cueType,
-      cueValue: updatedStack.cueValue,
-      isPreset: updatedStack.isPreset,
-      presetKey: updatedStack.presetKey,
-      isActive: updatedStack.isActive,
-      createdAt: updatedStack.createdAt,
-      updatedAt: updatedStack.updatedAt,
+      stack: {
+        id: updatedStack.id,
+        name: updatedStack.name,
+        description: updatedStack.description,
+        activityIds: updatedStack.activityIds,
+        activities: updatedStack.activities,
+        cueType: updatedStack.cueType,
+        cueValue: updatedStack.cueValue,
+        isPreset: updatedStack.isPreset,
+        presetKey: updatedStack.presetKey,
+        isActive: updatedStack.isActive,
+        completionBonus: updatedStack.completionBonus,
+        currentStreak: updatedStack.currentStreak,
+        createdAt: updatedStack.createdAt,
+        updatedAt: updatedStack.updatedAt,
+      },
     });
   } catch (error) {
     console.error('Stack update error:', error);

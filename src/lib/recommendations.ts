@@ -10,7 +10,7 @@
 
 import { prisma } from './db';
 import { getDailyStatus } from './daily-status';
-import { getActiveStacks, HabitStack } from './habit-stacks';
+import { getActiveStacks, HabitStackWithActivities, ActivityInStack } from './habit-stacks';
 import { getDailyQuote } from './quotes';
 import { SubCategory } from '@prisma/client';
 
@@ -38,8 +38,8 @@ export interface StreakStatusRecommendation {
 
 export interface NextInStackInfo {
   stackName: string;
-  activity: SubCategory;
-  afterCompleting: SubCategory | null;
+  activity: ActivityInStack;
+  afterCompleting: ActivityInStack | null;
 }
 
 export interface Quote {
@@ -275,16 +275,15 @@ function getQuickActionsForIncomplete(
  */
 async function findNextInStack(
   userId: string,
-  completedSubCategories: Set<SubCategory>
+  completedActivityIds: Set<string>
 ): Promise<NextInStackInfo | null> {
   const activeStacks = await getActiveStacks(userId);
 
   for (const stack of activeStacks) {
-    const activities = stack.activities as SubCategory[];
-    let previousActivity: SubCategory | null = null;
+    let previousActivity: ActivityInStack | null = null;
 
-    for (const activity of activities) {
-      if (!completedSubCategories.has(activity)) {
+    for (const activity of stack.activities) {
+      if (!completedActivityIds.has(activity.id)) {
         return {
           stackName: stack.name,
           activity,
@@ -342,23 +341,17 @@ export async function getRecommendations(userId: string): Promise<Recommendation
     quickActions,
   };
 
-  // Get completed subcategories for next-in-stack calculation
-  const completedSubCategories = new Set<SubCategory>();
+  // Get completed activity IDs for next-in-stack calculation
+  const completedActivityIds = new Set<string>();
   for (const activity of dailyStatus.body.activities) {
-    const subCat = activity.category as SubCategory;
-    if (Object.values(SubCategory).includes(subCat)) {
-      completedSubCategories.add(subCat);
-    }
+    completedActivityIds.add(activity.id);
   }
   for (const activity of dailyStatus.mind.activities) {
-    const subCat = activity.category as SubCategory;
-    if (Object.values(SubCategory).includes(subCat)) {
-      completedSubCategories.add(subCat);
-    }
+    completedActivityIds.add(activity.id);
   }
 
   // Find next activity in stack
-  const nextInStack = await findNextInStack(userId, completedSubCategories);
+  const nextInStack = await findNextInStack(userId, completedActivityIds);
 
   return {
     recovery,

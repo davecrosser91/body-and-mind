@@ -9,61 +9,8 @@ import {
 import {
   getStacks,
   createStack,
-  initializePresetStacks,
-  hasStacks,
-  PRESET_STACKS,
 } from '@/lib/habit-stacks';
-import { CueType, SubCategory } from '@prisma/client';
-
-/**
- * GET /api/v1/stacks
- * Returns all habit stacks for the authenticated user
- * Initializes preset stacks if the user has none
- */
-export const GET = requireAuth(async (_request: NextRequest, { user }) => {
-  try {
-    // Check if user has any stacks, initialize presets if not
-    const userHasStacks = await hasStacks(user.id);
-
-    if (!userHasStacks) {
-      await initializePresetStacks(user.id);
-    }
-
-    const stacks = await getStacks(user.id);
-
-    // Format response with additional metadata
-    const formattedStacks = stacks.map((stack) => ({
-      id: stack.id,
-      name: stack.name,
-      description: stack.description,
-      activities: stack.activities,
-      cueType: stack.cueType,
-      cueValue: stack.cueValue,
-      isPreset: stack.isPreset,
-      presetKey: stack.presetKey,
-      isActive: stack.isActive,
-      createdAt: stack.createdAt,
-      updatedAt: stack.updatedAt,
-    }));
-
-    return successResponse({
-      stacks: formattedStacks,
-      presetCount: formattedStacks.filter((s) => s.isPreset).length,
-      customCount: formattedStacks.filter((s) => !s.isPreset).length,
-      activeCount: formattedStacks.filter((s) => s.isActive).length,
-    });
-  } catch (error) {
-    console.error('Stacks fetch error:', error);
-    return internalError('Failed to fetch habit stacks');
-  }
-});
-
-/**
- * Validate that a string is a valid SubCategory enum value
- */
-function isValidSubCategory(value: string): value is SubCategory {
-  return Object.values(SubCategory).includes(value as SubCategory);
-}
+import { CueType } from '@prisma/client';
 
 /**
  * Validate that a string is a valid CueType enum value
@@ -71,6 +18,43 @@ function isValidSubCategory(value: string): value is SubCategory {
 function isValidCueType(value: string): value is CueType {
   return Object.values(CueType).includes(value as CueType);
 }
+
+/**
+ * GET /api/v1/stacks
+ * Returns all habit stacks for the authenticated user
+ */
+export const GET = requireAuth(async (_request: NextRequest, { user }) => {
+  try {
+    const stacks = await getStacks(user.id);
+
+    // Format response
+    const formattedStacks = stacks.map((stack) => ({
+      id: stack.id,
+      name: stack.name,
+      description: stack.description,
+      activityIds: stack.activityIds,
+      activities: stack.activities,
+      cueType: stack.cueType,
+      cueValue: stack.cueValue,
+      isPreset: stack.isPreset,
+      presetKey: stack.presetKey,
+      isActive: stack.isActive,
+      completionBonus: stack.completionBonus,
+      currentStreak: stack.currentStreak,
+      createdAt: stack.createdAt,
+      updatedAt: stack.updatedAt,
+    }));
+
+    return successResponse({
+      stacks: formattedStacks,
+      activeCount: formattedStacks.filter((s) => s.isActive).length,
+      totalActivitiesInStacks: formattedStacks.reduce((sum, s) => sum + s.activities.length, 0),
+    });
+  } catch (error) {
+    console.error('Stacks fetch error:', error);
+    return internalError('Failed to fetch habit stacks');
+  }
+});
 
 /**
  * POST /api/v1/stacks
@@ -85,20 +69,18 @@ export const POST = requireAuth(async (request: NextRequest, { user }) => {
       return badRequestError('Name is required and must be a non-empty string');
     }
 
-    if (!body.activities || !Array.isArray(body.activities)) {
-      return badRequestError('Activities must be an array');
+    if (!body.activityIds || !Array.isArray(body.activityIds)) {
+      return badRequestError('activityIds must be an array of activity IDs');
     }
 
-    if (body.activities.length < 2) {
+    if (body.activityIds.length < 2) {
       return badRequestError('A habit stack must have at least 2 activities');
     }
 
-    // Validate all activities are valid SubCategory values
-    for (const activity of body.activities) {
-      if (typeof activity !== 'string' || !isValidSubCategory(activity)) {
-        return badRequestError(
-          `Invalid activity: ${activity}. Must be one of: ${Object.values(SubCategory).join(', ')}`
-        );
+    // Validate all activityIds are strings
+    for (const activityId of body.activityIds) {
+      if (typeof activityId !== 'string') {
+        return badRequestError('All activityIds must be strings');
       }
     }
 
@@ -133,33 +115,41 @@ export const POST = requireAuth(async (request: NextRequest, { user }) => {
       }
     }
 
-    // Validate isActive if provided
-    if (body.isActive !== undefined && typeof body.isActive !== 'boolean') {
-      return badRequestError('isActive must be a boolean');
+    // Validate completionBonus if provided
+    if (body.completionBonus !== undefined) {
+      if (typeof body.completionBonus !== 'number' || body.completionBonus < 0 || body.completionBonus > 100) {
+        return badRequestError('completionBonus must be a number between 0 and 100');
+      }
     }
 
     // Create the stack
     const stack = await createStack(user.id, {
       name: body.name.trim(),
       description: body.description?.trim() || undefined,
-      activities: body.activities as SubCategory[],
+      activityIds: body.activityIds,
       cueType: body.cueType as CueType | undefined,
       cueValue: body.cueValue?.trim() || undefined,
       isActive: body.isActive,
+      completionBonus: body.completionBonus,
     });
 
     return createdResponse({
-      id: stack.id,
-      name: stack.name,
-      description: stack.description,
-      activities: stack.activities,
-      cueType: stack.cueType,
-      cueValue: stack.cueValue,
-      isPreset: stack.isPreset,
-      presetKey: stack.presetKey,
-      isActive: stack.isActive,
-      createdAt: stack.createdAt,
-      updatedAt: stack.updatedAt,
+      stack: {
+        id: stack.id,
+        name: stack.name,
+        description: stack.description,
+        activityIds: stack.activityIds,
+        activities: stack.activities,
+        cueType: stack.cueType,
+        cueValue: stack.cueValue,
+        isPreset: stack.isPreset,
+        presetKey: stack.presetKey,
+        isActive: stack.isActive,
+        completionBonus: stack.completionBonus,
+        currentStreak: stack.currentStreak,
+        createdAt: stack.createdAt,
+        updatedAt: stack.updatedAt,
+      },
     });
   } catch (error) {
     console.error('Stack creation error:', error);
