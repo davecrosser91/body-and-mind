@@ -1,158 +1,233 @@
 /**
- * Activity Logging API
+ * Activities API
  *
- * POST /api/v1/activities
- * Log an activity for a user. This endpoint supports:
- * - Manual activity logging from the app
- * - Whoop sync logging
- * - Claude bot integration for logging on behalf of users
- *
- * Creates or finds a habit for the pillar+category, creates a completion,
- * and updates streaks and daily goals.
+ * GET /api/v1/activities - List activities for the authenticated user
+ * POST /api/v1/activities - Create a new activity
  */
 
 import { NextRequest } from 'next/server'
 import { requireAuth } from '@/lib/auth-middleware'
 import {
+  successResponse,
   createdResponse,
   badRequestError,
   internalError,
 } from '@/lib/api-response'
-import { logActivity, LogActivityInput } from '@/lib/services/habit-completion'
+import { prisma } from '@/lib/db'
+import { Pillar, Frequency, CueType } from '@prisma/client'
 
 /**
- * Valid pillars for activity logging
+ * GET /api/v1/activities
+ * Returns all non-archived activities for the authenticated user
+ *
+ * Query params:
+ * - pillar: Filter by pillar (BODY, MIND)
+ * - subCategory: Filter by subCategory
+ * - habitsOnly: If 'true', only return activities where isHabit = true
  */
-const VALID_PILLARS = ['BODY', 'MIND'] as const
+export const GET = requireAuth(async (request: NextRequest, { user }) => {
+  try {
+    const { searchParams } = new URL(request.url)
+    const pillarParam = searchParams.get('pillar')
+    const subCategoryParam = searchParams.get('subCategory')
+    const habitsOnlyParam = searchParams.get('habitsOnly')
+
+    // Validate pillar if provided
+    if (pillarParam && !isValidPillar(pillarParam)) {
+      return badRequestError(
+        `Invalid pillar. Must be one of: ${Object.values(Pillar).join(', ')}`
+      )
+    }
+
+    // Build the where clause
+    const whereClause: {
+      userId: string
+      archived: boolean
+      pillar?: Pillar
+      subCategory?: string
+      isHabit?: boolean
+    } = {
+      userId: user.id,
+      archived: false,
+    }
+
+    if (pillarParam) {
+      whereClause.pillar = pillarParam as Pillar
+    }
+
+    if (subCategoryParam) {
+      whereClause.subCategory = subCategoryParam.toUpperCase()
+    }
+
+    if (habitsOnlyParam === 'true') {
+      whereClause.isHabit = true
+    }
+
+    // Fetch activities
+    const activities = await prisma.activity.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'desc' },
+    })
+
+    // Map to response format
+    const activitiesResponse = activities.map((activity) => ({
+      id: activity.id,
+      name: activity.name,
+      pillar: activity.pillar,
+      subCategory: activity.subCategory,
+      frequency: activity.frequency,
+      description: activity.description,
+      points: activity.points,
+      isHabit: activity.isHabit,
+      cueType: activity.cueType,
+      cueValue: activity.cueValue,
+      createdAt: activity.createdAt,
+      updatedAt: activity.updatedAt,
+    }))
+
+    return successResponse(activitiesResponse)
+  } catch (error) {
+    console.error('Activities fetch error:', error)
+    return internalError('Failed to fetch activities')
+  }
+})
 
 /**
- * Valid categories for each pillar
+ * Check if a string is a valid Pillar enum value
  */
-const PILLAR_CATEGORIES = {
-  BODY: ['TRAINING', 'SLEEP', 'NUTRITION'],
-  MIND: ['MEDITATION', 'READING', 'LEARNING', 'JOURNALING'],
-} as const
-
-type Pillar = (typeof VALID_PILLARS)[number]
-type BodyCategory = (typeof PILLAR_CATEGORIES.BODY)[number]
-type MindCategory = (typeof PILLAR_CATEGORIES.MIND)[number]
-type ActivityCategory = BodyCategory | MindCategory
-
-/**
- * Request body for activity logging
- */
-interface LogActivityRequest {
-  pillar: Pillar
-  category: ActivityCategory
-  duration?: number
-  details?: string
-  source?: 'manual' | 'whoop' | 'api'
-}
-
-/**
- * Validate that a category is valid for the given pillar
- */
-function isValidCategoryForPillar(
-  pillar: Pillar,
-  category: string
-): category is ActivityCategory {
-  const validCategories = PILLAR_CATEGORIES[pillar] as readonly string[]
-  return validCategories.includes(category)
+function isValidPillar(value: string): value is Pillar {
+  return Object.values(Pillar).includes(value as Pillar)
 }
 
 /**
  * POST /api/v1/activities
- * Log an activity for the authenticated user
+ * Create a new activity for the authenticated user
  *
  * Request body:
+ * - name: string (required)
  * - pillar: 'BODY' | 'MIND' (required)
- * - category: Category within the pillar (required)
- *   - BODY: 'TRAINING' | 'SLEEP' | 'NUTRITION'
- *   - MIND: 'MEDITATION' | 'READING' | 'LEARNING' | 'JOURNALING'
- * - duration?: number (optional, in minutes)
- * - details?: string (optional, notes about the activity)
- * - source?: 'manual' | 'whoop' | 'api' (optional, defaults to 'manual')
- *
- * Response:
- * - habitId: string - ID of the habit (may be newly created)
- * - completionId: string - ID of the completion record
- * - isNew: boolean - Whether a new habit was created
- * - message: string - Human-readable success message
+ * - subCategory: string (required)
+ * - points?: number (optional, defaults to 25)
+ * - isHabit?: boolean (optional, defaults to false)
+ * - description?: string (optional)
+ * - frequency?: 'DAILY' | 'WEEKLY' | 'CUSTOM' (optional, defaults to DAILY)
+ * - cueType?: 'TIME' | 'LOCATION' | 'AFTER_ACTIVITY' (optional)
+ * - cueValue?: string (optional)
  */
 export const POST = requireAuth(async (request: NextRequest, { user }) => {
   try {
     // Parse request body
-    let body: LogActivityRequest
+    let body: {
+      name?: string
+      pillar?: string
+      subCategory?: string
+      points?: number
+      isHabit?: boolean
+      description?: string
+      frequency?: string
+      cueType?: string
+      cueValue?: string
+    }
+
     try {
       body = await request.json()
     } catch {
       return badRequestError('Invalid JSON in request body')
     }
 
-    const { pillar, category, duration, details, source } = body
+    const {
+      name,
+      pillar,
+      subCategory,
+      points = 25,
+      isHabit = false,
+      description,
+      frequency = 'DAILY',
+      cueType,
+      cueValue,
+    } = body
 
-    // Validate pillar
+    // Validate required fields
+    if (!name) {
+      return badRequestError('name is required')
+    }
+
     if (!pillar) {
       return badRequestError('pillar is required')
     }
-    if (!VALID_PILLARS.includes(pillar as Pillar)) {
+
+    if (!isValidPillar(pillar)) {
       return badRequestError(
-        `Invalid pillar. Must be one of: ${VALID_PILLARS.join(', ')}`
+        `Invalid pillar. Must be one of: ${Object.values(Pillar).join(', ')}`
       )
     }
 
-    // Validate category
-    if (!category) {
-      return badRequestError('category is required')
+    if (!subCategory) {
+      return badRequestError('subCategory is required')
     }
-    if (!isValidCategoryForPillar(pillar as Pillar, category)) {
-      const validCategories = PILLAR_CATEGORIES[pillar as Pillar]
+
+    // Validate frequency if provided
+    const validFrequencies = Object.values(Frequency)
+    if (!validFrequencies.includes(frequency as Frequency)) {
       return badRequestError(
-        `Invalid category for ${pillar}. Must be one of: ${validCategories.join(', ')}`
+        `Invalid frequency. Must be one of: ${validFrequencies.join(', ')}`
       )
     }
 
-    // Validate duration if provided
-    if (duration !== undefined) {
-      if (typeof duration !== 'number' || duration < 0) {
-        return badRequestError('duration must be a positive number (minutes)')
+    // Validate cueType if provided
+    if (cueType) {
+      const validCueTypes = Object.values(CueType)
+      if (!validCueTypes.includes(cueType as CueType)) {
+        return badRequestError(
+          `Invalid cueType. Must be one of: ${validCueTypes.join(', ')}`
+        )
+      }
+
+      // Validate cue value if cue type is provided
+      if (cueType === 'TIME') {
+        const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/
+        if (!cueValue || !timeRegex.test(cueValue)) {
+          return badRequestError(
+            'cueValue must be in HH:mm format for TIME cue type'
+          )
+        }
+      } else if (!cueValue || cueValue.trim().length === 0) {
+        return badRequestError(`cueValue is required when cueType is ${cueType}`)
       }
     }
 
-    // Validate source if provided
-    const validSources = ['manual', 'whoop', 'api']
-    if (source !== undefined && !validSources.includes(source)) {
-      return badRequestError(
-        `Invalid source. Must be one of: ${validSources.join(', ')}`
-      )
-    }
-
-    // Build input for logActivity
-    const input: LogActivityInput = {
-      pillar: pillar as 'BODY' | 'MIND',
-      category: category,
-      duration,
-      details,
-      source: source as 'manual' | 'whoop' | 'api' | undefined,
-    }
-
-    // Log the activity
-    const result = await logActivity(user.id, input)
-
-    // Build success message
-    let message = `Activity logged successfully`
-    if (result.isNew) {
-      message = `Activity logged and new habit created for ${category.toLowerCase()}`
-    }
+    // Create the activity
+    const activity = await prisma.activity.create({
+      data: {
+        name,
+        pillar: pillar as Pillar,
+        subCategory: subCategory.toUpperCase(),
+        points,
+        isHabit,
+        description: description || null,
+        frequency: frequency as Frequency,
+        cueType: cueType ? (cueType as CueType) : null,
+        cueValue: cueValue || null,
+        userId: user.id,
+      },
+    })
 
     return createdResponse({
-      habitId: result.habitId,
-      completionId: result.completionId,
-      isNew: result.isNew,
-      message,
+      id: activity.id,
+      name: activity.name,
+      pillar: activity.pillar,
+      subCategory: activity.subCategory,
+      frequency: activity.frequency,
+      description: activity.description,
+      points: activity.points,
+      isHabit: activity.isHabit,
+      cueType: activity.cueType,
+      cueValue: activity.cueValue,
+      createdAt: activity.createdAt,
+      updatedAt: activity.updatedAt,
     })
   } catch (error) {
-    console.error('Activity logging error:', error)
-    return internalError('Failed to log activity')
+    console.error('Activity creation error:', error)
+    return internalError('Failed to create activity')
   }
 })
