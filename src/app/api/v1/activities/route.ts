@@ -63,7 +63,13 @@ export const GET = requireAuth(async (request: NextRequest, { user }) => {
       whereClause.isHabit = true
     }
 
-    // Fetch activities with auto-trigger info
+    // Get today's date range for checking completions
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const todayEnd = new Date()
+    todayEnd.setHours(23, 59, 59, 999)
+
+    // Fetch activities with auto-trigger info and today's completions
     const activities = await prisma.activity.findMany({
       where: whereClause,
       include: {
@@ -73,6 +79,15 @@ export const GET = requireAuth(async (request: NextRequest, { user }) => {
               select: { id: true, name: true },
             },
           },
+        },
+        completions: {
+          where: {
+            completedAt: {
+              gte: todayStart,
+              lte: todayEnd,
+            },
+          },
+          take: 1,
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -92,6 +107,7 @@ export const GET = requireAuth(async (request: NextRequest, { user }) => {
       cueValue: activity.cueValue,
       createdAt: activity.createdAt,
       updatedAt: activity.updatedAt,
+      completedToday: activity.completions.length > 0,
       autoTrigger: activity.autoTrigger
         ? {
             id: activity.autoTrigger.id,
