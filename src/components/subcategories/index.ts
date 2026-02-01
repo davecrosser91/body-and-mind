@@ -7,3 +7,4 @@ export { LearningDashboard } from './LearningDashboard';
 export { JournalingDashboard } from './JournalingDashboard';
 export { CustomDashboard } from './CustomDashboard';
 export { SubCategoryTabs } from './SubCategoryTabs';
+export { AddSubCategoryModal } from './AddSubCategoryModal';
