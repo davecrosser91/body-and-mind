@@ -2,9 +2,10 @@
 
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pillar, SubCategory } from '@prisma/client';
+import { Pillar } from '@prisma/client';
+import type { SubCategory } from './CreateHabitWizard/types';
 import { HabitCard } from './HabitCard';
-import { CreateHabitModalNew } from './CreateHabitModalNew';
+import { CreateHabitWizard } from './CreateHabitWizard';
 import { GlowButton } from '../ui/GlowButton';
 
 export interface HabitNew {
@@ -79,9 +80,12 @@ export function HabitListNew({
     }
   };
 
-  const handleHabitCreated = (habit: { id: string; name: string; pillar: Pillar; subCategory: SubCategory }) => {
+  const handleHabitCreated = (habit: { id: string; name: string; pillar: Pillar; subCategory: SubCategory; points: number }) => {
     const newHabit: HabitNew = {
-      ...habit,
+      id: habit.id,
+      name: habit.name,
+      pillar: habit.pillar,
+      subCategory: habit.subCategory,
       completedToday: false,
     };
     onHabitCreated?.(newHabit);
@@ -114,7 +118,7 @@ export function HabitListNew({
           </GlowButton>
         )}
 
-        <CreateHabitModalNew
+        <CreateHabitWizard
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
           onCreated={handleHabitCreated}
@@ -279,7 +283,7 @@ export function HabitListNew({
       )}
 
       {/* Create modal */}
-      <CreateHabitModalNew
+      <CreateHabitWizard
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreated={handleHabitCreated}

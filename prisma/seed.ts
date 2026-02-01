@@ -1,4 +1,4 @@
-import { PrismaClient, Category, HabitanimalType } from '@prisma/client'
+import { PrismaClient, HabitanimalType, Pillar, Frequency } from '@prisma/client'
 import { hash } from 'bcryptjs'
 
 const prisma = new PrismaClient()
@@ -11,19 +11,19 @@ const HABITANIMALS = [
   { type: HabitanimalType.LEARNING, species: 'fox', name: 'Finn' },
 ]
 
-const SAMPLE_HABITS = [
-  { name: 'Morning Workout', category: Category.FITNESS, description: '30 minutes of exercise' },
-  { name: 'Meditation', category: Category.MINDFULNESS, description: '10 minutes of mindfulness meditation' },
-  { name: 'Eat Vegetables', category: Category.NUTRITION, description: 'Include vegetables in at least 2 meals' },
-  { name: 'Sleep by 10pm', category: Category.SLEEP, description: 'Be in bed by 10pm for quality sleep' },
-  { name: 'Read 20 Pages', category: Category.LEARNING, description: 'Read at least 20 pages of a book' },
-  { name: 'Evening Walk', category: Category.FITNESS, description: '15 minute walk after dinner' },
-  { name: 'Journal', category: Category.MINDFULNESS, description: 'Write 3 things you are grateful for' },
-  { name: 'Drink Water', category: Category.NUTRITION, description: 'Drink 8 glasses of water' },
+const SAMPLE_ACTIVITIES = [
+  { name: 'Morning Workout', pillar: Pillar.BODY, subCategory: 'TRAINING', description: '30 minutes of exercise', points: 30 },
+  { name: 'Meditation', pillar: Pillar.MIND, subCategory: 'MEDITATION', description: '10 minutes of mindfulness meditation', points: 25 },
+  { name: 'Eat Vegetables', pillar: Pillar.BODY, subCategory: 'NUTRITION', description: 'Include vegetables in at least 2 meals', points: 20 },
+  { name: 'Sleep by 10pm', pillar: Pillar.BODY, subCategory: 'SLEEP', description: 'Be in bed by 10pm for quality sleep', points: 25 },
+  { name: 'Read 20 Pages', pillar: Pillar.MIND, subCategory: 'READING', description: 'Read at least 20 pages of a book', points: 25 },
+  { name: 'Evening Walk', pillar: Pillar.BODY, subCategory: 'TRAINING', description: '15 minute walk after dinner', points: 20 },
+  { name: 'Journal', pillar: Pillar.MIND, subCategory: 'JOURNALING', description: 'Write 3 things you are grateful for', points: 20 },
+  { name: 'Drink Water', pillar: Pillar.BODY, subCategory: 'NUTRITION', description: 'Drink 8 glasses of water', points: 15 },
 ]
 
 async function main() {
-  console.log('🌱 Starting seed...')
+  console.log('Starting seed...')
 
   // Create test user
   const passwordHash = await hash('password123', 12)
@@ -38,7 +38,7 @@ async function main() {
     },
   })
 
-  console.log(`✅ Created test user: ${user.email}`)
+  console.log(`Created test user: ${user.email}`)
 
   // Create habitanimals for the user
   for (const habitanimal of HABITANIMALS) {
@@ -56,27 +56,31 @@ async function main() {
     })
   }
 
-  console.log(`✅ Created ${HABITANIMALS.length} Habitanimals`)
+  console.log(`Created ${HABITANIMALS.length} Habitanimals`)
 
-  // Create sample habits
-  for (const habit of SAMPLE_HABITS) {
-    await prisma.habit.upsert({
+  // Create sample activities
+  for (const activity of SAMPLE_ACTIVITIES) {
+    await prisma.activity.upsert({
       where: {
-        id: `${user.id}-${habit.name.toLowerCase().replace(/\s+/g, '-')}`,
+        id: `${user.id}-${activity.name.toLowerCase().replace(/\s+/g, '-')}`,
       },
       update: {},
       create: {
-        name: habit.name,
-        category: habit.category,
-        description: habit.description,
+        name: activity.name,
+        pillar: activity.pillar,
+        subCategory: activity.subCategory,
+        description: activity.description,
+        points: activity.points,
+        isHabit: true,
+        frequency: Frequency.DAILY,
         userId: user.id,
       },
     })
   }
 
-  console.log(`✅ Created ${SAMPLE_HABITS.length} sample habits`)
+  console.log(`Created ${SAMPLE_ACTIVITIES.length} sample activities`)
 
-  console.log('🌱 Seed completed!')
+  console.log('Seed completed!')
 }
 
 main()

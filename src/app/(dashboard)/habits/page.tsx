@@ -1,170 +1,164 @@
-'use client'
+'use client';
 
-import { useEffect, useState, useCallback } from 'react'
-import { motion } from 'framer-motion'
-import { HabitList } from '@/components/habits/HabitList'
-import { CreateHabitModal } from '@/components/habits/CreateHabitModal'
-import { useAuth } from '@/hooks/useAuth'
+import { useEffect, useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import { Pillar } from '@prisma/client';
+import { HabitListNew, HabitNew } from '@/components/habits';
+import { useAuth } from '@/hooks/useAuth';
 
-interface Habit {
-  id: string
-  name: string
-  category: 'FITNESS' | 'MINDFULNESS' | 'NUTRITION' | 'SLEEP' | 'LEARNING'
-  frequency: string
-  completedToday: boolean
-  habitanimalName: string
-}
+// SubCategory is now a string type
+type SubCategory = 'TRAINING' | 'SLEEP' | 'NUTRITION' | 'MEDITATION' | 'READING' | 'LEARNING' | 'JOURNALING';
 
 export default function HabitsPage() {
-  const { token } = useAuth()
-  const [habits, setHabits] = useState<Habit[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [showCreateModal, setShowCreateModal] = useState(false)
+  const { token } = useAuth();
+  const [habits, setHabits] = useState<HabitNew[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchHabits = useCallback(async () => {
-    if (!token) return
+    if (!token) return;
 
     try {
-      const response = await fetch('/api/v1/habits', {
+      const response = await fetch('/api/v1/activities?habitsOnly=true', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      })
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch habits')
+        throw new Error('Failed to fetch habits');
       }
 
-      const data = await response.json()
-      const items = data.data?.items || data.data || []
-      setHabits(items)
+      const data = await response.json();
+      const items = data.data || [];
+      // Map API response to HabitNew format
+      const mappedHabits: HabitNew[] = items.map((h: {
+        id: string;
+        name: string;
+        pillar?: Pillar;
+        subCategory?: string;
+        completedToday: boolean;
+      }) => ({
+        id: h.id,
+        name: h.name,
+        pillar: h.pillar || 'BODY',
+        subCategory: h.subCategory || 'TRAINING',
+        completedToday: h.completedToday,
+      }));
+      setHabits(mappedHabits);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [token])
+  }, [token]);
 
   useEffect(() => {
-    fetchHabits()
-  }, [fetchHabits])
+    fetchHabits();
+  }, [fetchHabits]);
 
   const handleComplete = async (habitId: string) => {
-    if (!token) return
+    if (!token) return;
 
     try {
-      const response = await fetch(`/api/v1/habits/${habitId}/complete`, {
+      const response = await fetch(`/api/v1/activities/${habitId}/complete`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      })
+      });
 
       if (response.ok) {
-        // Refresh habits list
-        fetchHabits()
+        // Optimistic update
+        setHabits(prev => prev.map(h =>
+          h.id === habitId ? { ...h, completedToday: true } : h
+        ));
       }
     } catch (err) {
-      console.error('Failed to complete habit:', err)
+      console.error('Failed to complete habit:', err);
     }
-  }
+  };
 
   const handleUncomplete = async (habitId: string) => {
-    if (!token) return
+    if (!token) return;
 
     try {
-      const response = await fetch(`/api/v1/habits/${habitId}/complete`, {
+      const response = await fetch(`/api/v1/activities/${habitId}/complete`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      })
+      });
 
       if (response.ok) {
-        fetchHabits()
+        // Optimistic update
+        setHabits(prev => prev.map(h =>
+          h.id === habitId ? { ...h, completedToday: false } : h
+        ));
       }
     } catch (err) {
-      console.error('Failed to uncomplete habit:', err)
+      console.error('Failed to uncomplete habit:', err);
     }
-  }
+  };
 
-  const handleCreateHabit = async (data: { name: string; category: string; frequency: string }) => {
-    if (!token) return
-
-    try {
-      const response = await fetch('/api/v1/habits', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(data),
-      })
-
-      if (response.ok) {
-        setShowCreateModal(false)
-        fetchHabits()
-      }
-    } catch (err) {
-      console.error('Failed to create habit:', err)
-    }
-  }
+  const handleHabitCreated = (habit: HabitNew) => {
+    setHabits(prev => [...prev, habit]);
+  };
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="h-8 w-48 bg-gray-200 rounded animate-pulse" />
+      <div className="space-y-6 animate-pulse">
+        <div className="h-8 w-48 bg-surface-light rounded" />
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-16 bg-gray-200 rounded-lg animate-pulse" />
+            <div key={i} className="h-16 bg-surface-light rounded-xl" />
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   if (error) {
     return (
       <div className="text-center py-12">
-        <p className="text-red-500 mb-4">{error}</p>
+        <p className="text-red-400 mb-4">{error}</p>
         <button
           onClick={() => window.location.reload()}
-          className="text-sm text-gray-600 hover:text-gray-900 underline"
+          className="text-sm text-text-muted hover:text-text-primary underline"
         >
           Try again
         </button>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="space-y-6 max-w-4xl mx-auto"
+    >
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex items-center justify-between"
       >
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Your Habits</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Complete habits to earn XP for your Habitanimals
+          <h1 className="text-2xl font-bold text-text-primary">Your Habits</h1>
+          <p className="text-sm text-text-muted mt-1">
+            Build consistency with daily Body & Mind habits
           </p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
-        >
-          Add Habit
-        </motion.button>
       </motion.div>
 
-      <HabitList
+      {/* Habit List with integrated create button */}
+      <HabitListNew
         habits={habits}
         onComplete={handleComplete}
         onUncomplete={handleUncomplete}
+        onHabitCreated={handleHabitCreated}
+        showAddButton={true}
       />
 
       {/* Stats */}
@@ -174,34 +168,25 @@ export default function HabitsPage() {
         transition={{ delay: 0.2 }}
         className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-8"
       >
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Total Habits</p>
-          <p className="text-2xl font-bold text-gray-900">{habits.length}</p>
+        <div className="bg-surface-light rounded-xl p-4 border border-white/5">
+          <p className="text-sm text-text-muted">Total Habits</p>
+          <p className="text-2xl font-bold text-text-primary">{habits.length}</p>
         </div>
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Completed Today</p>
-          <p className="text-2xl font-bold text-gray-900">
+        <div className="bg-surface-light rounded-xl p-4 border border-white/5">
+          <p className="text-sm text-text-muted">Completed Today</p>
+          <p className="text-2xl font-bold text-text-primary">
             {habits.filter((h) => h.completedToday).length}
           </p>
         </div>
-        <div className="bg-white rounded-lg p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Completion Rate</p>
-          <p className="text-2xl font-bold text-gray-900">
+        <div className="bg-surface-light rounded-xl p-4 border border-white/5">
+          <p className="text-sm text-text-muted">Completion Rate</p>
+          <p className="text-2xl font-bold text-text-primary">
             {habits.length > 0
               ? Math.round((habits.filter((h) => h.completedToday).length / habits.length) * 100)
               : 0}%
           </p>
         </div>
       </motion.div>
-
-      <CreateHabitModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onCreated={() => {
-          setShowCreateModal(false)
-          fetchHabits()
-        }}
-      />
-    </div>
-  )
+    </motion.div>
+  );
 }

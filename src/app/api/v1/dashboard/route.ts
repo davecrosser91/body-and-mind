@@ -23,17 +23,18 @@ export const GET = requireAuth(async (_request: NextRequest, { user }) => {
     todayEnd.setHours(23, 59, 59, 999)
 
     // Fetch all data in parallel
-    const [habitanimals, habits, todayCompletions] = await Promise.all([
+    const [habitanimals, activities, todayCompletions] = await Promise.all([
       // Get all habitanimals for the user
       prisma.habitanimal.findMany({
         where: { userId: user.id },
         orderBy: { type: 'asc' },
       }),
-      // Get all non-archived habits
-      prisma.habit.findMany({
+      // Get all non-archived activities (habits)
+      prisma.activity.findMany({
         where: {
           userId: user.id,
           archived: false,
+          isHabit: true,
         },
         include: {
           completions: {
@@ -50,9 +51,9 @@ export const GET = requireAuth(async (_request: NextRequest, { user }) => {
         orderBy: { createdAt: 'asc' },
       }),
       // Get count of today's completions for stats
-      prisma.habitCompletion.count({
+      prisma.activityCompletion.count({
         where: {
-          habit: {
+          activity: {
             userId: user.id,
             archived: false,
           },
@@ -65,7 +66,7 @@ export const GET = requireAuth(async (_request: NextRequest, { user }) => {
     ])
 
     // Calculate habitanimal derived fields
-    const habitanimalsWithDerivedFields = habitanimals.map((habitanimal) => {
+    const habitanimalsWithDerivedFields = habitanimals.map((habitanimal: { health: number; lastInteraction: Date; xp: number; id: string; type: string; species: string; name: string; evolutionStage: number }) => {
       const currentHealth = calculateHealthDecay(
         habitanimal.health,
         habitanimal.lastInteraction,
@@ -92,22 +93,25 @@ export const GET = requireAuth(async (_request: NextRequest, { user }) => {
       }
     })
 
-    // Format habits with completion status
-    const habitsWithStatus = habits.map((habit) => {
-      const todayCompletion = habit.completions[0] || null
+    // Format activities with completion status
+    const activitiesWithStatus = activities.map((activity: { id: string; name: string; pillar: string; subCategory: string; frequency: string; description: string | null; points: number; isHabit: boolean; completions: Array<{ id: string; completedAt: Date; details: string | null; pointsEarned: number; source: string }> }) => {
+      const todayCompletion = activity.completions[0] || null
       return {
-        id: habit.id,
-        name: habit.name,
-        category: habit.category,
-        frequency: habit.frequency,
-        description: habit.description,
+        id: activity.id,
+        name: activity.name,
+        pillar: activity.pillar,
+        subCategory: activity.subCategory,
+        frequency: activity.frequency,
+        description: activity.description,
+        points: activity.points,
+        isHabit: activity.isHabit,
         completedToday: todayCompletion !== null,
         todayCompletion: todayCompletion
           ? {
               id: todayCompletion.id,
               completedAt: todayCompletion.completedAt,
               details: todayCompletion.details,
-              xpEarned: todayCompletion.xpEarned,
+              pointsEarned: todayCompletion.pointsEarned,
               source: todayCompletion.source,
             }
           : null,
@@ -125,10 +129,10 @@ export const GET = requireAuth(async (_request: NextRequest, { user }) => {
         email: user.email,
       },
       habitanimals: habitanimalsWithDerivedFields,
-      habits: habitsWithStatus,
+      activities: activitiesWithStatus,
       stats: {
-        habitsCompletedToday: todayCompletions,
-        totalHabitsToday: habits.length,
+        activitiesCompletedToday: todayCompletions,
+        totalActivitiesToday: activities.length,
         currentStreak: streakInfo.currentStreak,
         longestStreak: streakInfo.longestStreak,
       },
@@ -148,9 +152,9 @@ async function calculateStreak(
   userId: string
 ): Promise<{ currentStreak: number; longestStreak: number }> {
   // Get completions grouped by date for the last 365 days
-  const completions = await prisma.habitCompletion.findMany({
+  const completions = await prisma.activityCompletion.findMany({
     where: {
-      habit: {
+      activity: {
         userId,
         archived: false,
       },
@@ -172,7 +176,7 @@ async function calculateStreak(
 
   // Get unique dates with completions
   const uniqueDates = new Set<string>()
-  completions.forEach((c) => {
+  completions.forEach((c: { completedAt: Date }) => {
     const dateStr = c.completedAt.toISOString().split('T')[0] as string
     uniqueDates.add(dateStr)
   })

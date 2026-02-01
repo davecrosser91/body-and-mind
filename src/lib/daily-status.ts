@@ -13,7 +13,21 @@ import { prisma } from './db';
 import { getDailyQuote } from './quotes';
 import { getAllStreaks } from './streaks';
 import { whoopFetch, refreshAccessToken, isTokenExpired, calculateExpiresAt } from './whoop';
-import { WhoopRecovery } from './whoop-sync';
+import { WhoopRecovery, WhoopSleep, WhoopWorkout } from './whoop-sync';
+
+// Whoop sport ID to name mapping
+const WHOOP_SPORT_NAMES: Record<number, string> = {
+  0: 'Running',
+  1: 'Cycling',
+  44: 'Weightlifting',
+  52: 'HIIT',
+  71: 'Yoga',
+  82: 'CrossFit',
+  84: 'Functional Fitness',
+  96: 'Walking',
+  126: 'Meditation',
+  // Add more as needed
+};
 
 // ============ CONSTANTS ============
 
@@ -59,6 +73,27 @@ interface RecoveryStatus {
   score: number | null;
   zone: RecoveryZone | null;
   recommendation: string | null;
+  hrv: number | null;
+  restingHeartRate: number | null;
+}
+
+interface WhoopSleepData {
+  hours: number;
+  efficiency: number;
+  remHours: number;
+  deepHours: number;
+  performance: number;
+}
+
+interface WhoopTrainingData {
+  strain: number;
+  calories: number;
+  workouts: {
+    name: string;
+    strain: number;
+    duration: number;
+    calories: number;
+  }[];
 }
 
 interface QuoteData {
@@ -72,6 +107,12 @@ export interface DailyStatus {
   mind: PillarStatus;
   streak: StreakStatus;
   recovery: RecoveryStatus | null;
+  whoop: {
+    connected: boolean;
+    lastSync: string | null;
+    sleep: WhoopSleepData | null;
+    training: WhoopTrainingData | null;
+  } | null;
   quote: QuoteData;
 }
 
@@ -115,12 +156,21 @@ function getRecoveryRecommendation(zone: RecoveryZone): string {
   }
 }
 
+interface WhoopPaginatedResponse<T> {
+  records: T[];
+  next_token?: string;
+}
+
+interface WhoopConnectionData {
+  accessToken: string;
+  lastSync: Date | null;
+}
+
 /**
- * Fetch recovery data from Whoop API
+ * Get Whoop connection and refresh token if needed
  */
-async function getWhoopRecovery(userId: string): Promise<RecoveryStatus | null> {
+async function getWhoopConnection(userId: string): Promise<WhoopConnectionData | null> {
   try {
-    // Get user's Whoop connection
     const connection = await prisma.whoopConnection.findUnique({
       where: { userId },
     });
@@ -147,64 +197,51 @@ async function getWhoopRecovery(userId: string): Promise<RecoveryStatus | null> 
 
         accessToken = refreshed.access_token;
       } catch {
-        // Token refresh failed, return null
-        console.error('Failed to refresh Whoop token for daily status');
+        console.error('Failed to refresh Whoop token');
         return null;
       }
     }
 
-    // Fetch today's recovery data with timeout to prevent blocking
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    return { accessToken, lastSync: connection.lastSync };
+  } catch {
+    return null;
+  }
+}
 
-    const startParam = today.toISOString();
-    const endParam = tomorrow.toISOString();
-
-    interface WhoopPaginatedResponse<T> {
-      records: T[];
-      next_token?: string;
-    }
-
-    // Create AbortController for timeout
+/**
+ * Fetch recovery data from Whoop API
+ * Uses cycle-based approach: first get latest cycle, then get recovery for that cycle
+ */
+async function getWhoopRecovery(accessToken: string): Promise<RecoveryStatus | null> {
+  try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), WHOOP_FETCH_TIMEOUT_MS);
 
     try {
-      const response = await whoopFetch<WhoopPaginatedResponse<WhoopRecovery>>(
-        `/developer/v1/recovery?start=${startParam}&end=${endParam}`,
+      // Step 1: Get the latest cycle
+      const cycleResponse = await whoopFetch<WhoopPaginatedResponse<{ id: number }>>(
+        `/developer/v2/cycle?limit=1`,
         accessToken,
         { signal: controller.signal }
       );
 
-      if (response.records.length === 0) {
-        // Try getting most recent recovery
-        const recentResponse = await whoopFetch<WhoopPaginatedResponse<WhoopRecovery>>(
-          `/developer/v1/recovery?limit=1`,
-          accessToken,
-          { signal: controller.signal }
-        );
-
-        if (recentResponse.records.length === 0) {
-          return null;
-        }
-
-        const recovery = recentResponse.records[0];
-        if (!recovery) return null;
-
-        const score = recovery.score.recovery_score;
-        const zone = getRecoveryZone(score);
-
-        return {
-          score,
-          zone,
-          recommendation: getRecoveryRecommendation(zone),
-        };
+      const cycle = cycleResponse.records[0];
+      if (!cycle) {
+        console.log('No Whoop cycle found');
+        return null;
       }
 
-      const recovery = response.records[0];
-      if (!recovery) return null;
+      // Step 2: Get recovery for this cycle
+      const recovery = await whoopFetch<WhoopRecovery>(
+        `/developer/v2/cycle/${cycle.id}/recovery`,
+        accessToken,
+        { signal: controller.signal }
+      );
+
+      if (!recovery || !recovery.score) {
+        console.log('No recovery score for cycle', cycle.id);
+        return null;
+      }
 
       const score = recovery.score.recovery_score;
       const zone = getRecoveryZone(score);
@@ -213,12 +250,130 @@ async function getWhoopRecovery(userId: string): Promise<RecoveryStatus | null> 
         score,
         zone,
         recommendation: getRecoveryRecommendation(zone),
+        hrv: recovery.score.hrv_rmssd_milli,
+        restingHeartRate: recovery.score.resting_heart_rate,
       };
     } finally {
       clearTimeout(timeoutId);
     }
   } catch (error) {
     console.error('Error fetching Whoop recovery:', error);
+    return null;
+  }
+}
+
+/**
+ * Fetch sleep data from Whoop API
+ * Gets the most recent sleep record
+ */
+async function getWhoopSleep(accessToken: string): Promise<WhoopSleepData | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), WHOOP_FETCH_TIMEOUT_MS);
+
+    try {
+      // Get most recent sleep (limit=1 returns latest)
+      const response = await whoopFetch<WhoopPaginatedResponse<WhoopSleep>>(
+        `/developer/v2/activity/sleep?limit=1`,
+        accessToken,
+        { signal: controller.signal }
+      );
+
+      const sleep = response.records[0];
+      if (!sleep) {
+        console.log('No Whoop sleep data found');
+        return null;
+      }
+
+      const MILLIS_PER_HOUR = 3600000;
+      const totalHours = sleep.score.stage_summary.total_in_bed_time_milli / MILLIS_PER_HOUR;
+      const remHours = sleep.score.stage_summary.total_rem_sleep_time_milli / MILLIS_PER_HOUR;
+      const deepHours = sleep.score.stage_summary.total_slow_wave_sleep_time_milli / MILLIS_PER_HOUR;
+
+      return {
+        hours: Math.round(totalHours * 10) / 10,
+        efficiency: Math.round(sleep.score.sleep_efficiency_percentage),
+        remHours: Math.round(remHours * 10) / 10,
+        deepHours: Math.round(deepHours * 10) / 10,
+        performance: Math.round(sleep.score.sleep_performance_percentage),
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (error) {
+    console.error('Error fetching Whoop sleep:', error);
+    return null;
+  }
+}
+
+/**
+ * Fetch training/workout data from Whoop API
+ * Gets recent workouts (last 5)
+ */
+async function getWhoopTraining(accessToken: string): Promise<WhoopTrainingData | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), WHOOP_FETCH_TIMEOUT_MS);
+
+    try {
+      // Get recent workouts
+      const response = await whoopFetch<WhoopPaginatedResponse<WhoopWorkout>>(
+        `/developer/v2/activity/workout?limit=5`,
+        accessToken,
+        { signal: controller.signal }
+      );
+
+      if (response.records.length === 0) {
+        console.log('No Whoop workout data found');
+        return {
+          strain: 0,
+          calories: 0,
+          workouts: [],
+        };
+      }
+
+      // Filter to only today's workouts
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayWorkouts = response.records.filter(w => {
+        const workoutDate = new Date(w.start);
+        return workoutDate >= today;
+      });
+
+      if (todayWorkouts.length === 0) {
+        return {
+          strain: 0,
+          calories: 0,
+          workouts: [],
+        };
+      }
+
+      const workouts = todayWorkouts.map((workout) => {
+        const startTime = new Date(workout.start).getTime();
+        const endTime = new Date(workout.end).getTime();
+        const durationMinutes = Math.round((endTime - startTime) / 60000);
+
+        return {
+          name: WHOOP_SPORT_NAMES[workout.sport_id] || `Activity ${workout.sport_id}`,
+          strain: Math.round(workout.score.strain * 10) / 10,
+          duration: durationMinutes,
+          calories: Math.round(workout.score.kilojoule / 4.184), // Convert kJ to kcal
+        };
+      });
+
+      const totalStrain = workouts.reduce((sum, w) => sum + w.strain, 0);
+      const totalCalories = workouts.reduce((sum, w) => sum + w.calories, 0);
+
+      return {
+        strain: Math.round(totalStrain * 10) / 10,
+        calories: totalCalories,
+        workouts,
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  } catch (error) {
+    console.error('Error fetching Whoop training:', error);
     return null;
   }
 }
@@ -253,10 +408,13 @@ export async function getDailyStatus(userId: string): Promise<DailyStatus> {
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
 
+  // Get Whoop connection first
+  const whoopConnection = await getWhoopConnection(userId);
+
   // Fetch data in parallel
-  const [habits, streaks, quote, recovery] = await Promise.all([
-    // Get habits with pillar info and today's completions
-    prisma.habit.findMany({
+  const [activities, streaks, quote, recovery, sleep, training] = await Promise.all([
+    // Get activities with pillar info and today's completions
+    prisma.activity.findMany({
       where: {
         userId,
         archived: false,
@@ -276,36 +434,38 @@ export async function getDailyStatus(userId: string): Promise<DailyStatus> {
     }),
     getAllStreaks(userId),
     getDailyQuote(userId),
-    getWhoopRecovery(userId),
+    whoopConnection ? getWhoopRecovery(whoopConnection.accessToken) : Promise.resolve(null),
+    whoopConnection ? getWhoopSleep(whoopConnection.accessToken) : Promise.resolve(null),
+    whoopConnection ? getWhoopTraining(whoopConnection.accessToken) : Promise.resolve(null),
   ]);
 
-  // Separate habits by pillar and collect completed activities
-  const bodyActivities: CompletedActivity[] = [];
-  const mindActivities: CompletedActivity[] = [];
+  // Separate activities by pillar and collect completed ones
+  const bodyCompletedActivities: CompletedActivity[] = [];
+  const mindCompletedActivities: CompletedActivity[] = [];
 
-  for (const habit of habits) {
-    if (habit.completions.length > 0) {
-      const completion = habit.completions[0];
+  for (const activity of activities) {
+    if (activity.completions.length > 0) {
+      const completion = activity.completions[0];
       if (!completion) continue;
 
-      const activity: CompletedActivity = {
-        id: habit.id,
-        name: habit.name,
-        category: habit.subCategory || habit.category,
+      const completedActivity: CompletedActivity = {
+        id: activity.id,
+        name: activity.name,
+        category: activity.subCategory,
         completedAt: completion.completedAt.toISOString(),
       };
 
-      if (habit.pillar === 'BODY') {
-        bodyActivities.push(activity);
-      } else if (habit.pillar === 'MIND') {
-        mindActivities.push(activity);
+      if (activity.pillar === 'BODY') {
+        bodyCompletedActivities.push(completedActivity);
+      } else if (activity.pillar === 'MIND') {
+        mindCompletedActivities.push(completedActivity);
       }
     }
   }
 
   // Determine completion status (at least 1 activity per pillar)
-  const bodyCompleted = bodyActivities.length >= 1;
-  const mindCompleted = mindActivities.length >= 1;
+  const bodyCompleted = bodyCompletedActivities.length >= 1;
+  const mindCompleted = mindCompletedActivities.length >= 1;
 
   // Calculate hours remaining
   const hoursRemaining = getHoursRemainingToday();
@@ -320,13 +480,13 @@ export async function getDailyStatus(userId: string): Promise<DailyStatus> {
     date: todayStart.toISOString().split('T')[0] as string,
     body: {
       completed: bodyCompleted,
-      score: calculatePillarScore(bodyCompleted, bodyActivities.length),
-      activities: bodyActivities,
+      score: calculatePillarScore(bodyCompleted, bodyCompletedActivities.length),
+      activities: bodyCompletedActivities,
     },
     mind: {
       completed: mindCompleted,
-      score: calculatePillarScore(mindCompleted, mindActivities.length),
-      activities: mindActivities,
+      score: calculatePillarScore(mindCompleted, mindCompletedActivities.length),
+      activities: mindCompletedActivities,
     },
     streak: {
       current: overallStreak,
@@ -334,6 +494,14 @@ export async function getDailyStatus(userId: string): Promise<DailyStatus> {
       hoursRemaining,
     },
     recovery,
+    whoop: whoopConnection
+      ? {
+          connected: true,
+          lastSync: whoopConnection.lastSync?.toISOString() || null,
+          sleep,
+          training,
+        }
+      : null,
     quote: {
       text: quote.text,
       author: quote.author,

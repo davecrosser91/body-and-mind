@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   fetchDashboard,
-  completeHabit,
-  uncompleteHabit,
+  completeActivity,
+  uncompleteActivity,
   type DashboardData,
-  type CompleteHabitResponse,
+  type CompleteActivityResponse,
   ApiError,
 } from '@/lib/api-client'
 
@@ -24,7 +24,10 @@ interface UseDashboardState {
  */
 interface UseDashboardReturn extends UseDashboardState {
   refetch: () => Promise<void>
-  toggleHabit: (habitId: string) => Promise<CompleteHabitResponse | void>
+  toggleActivity: (activityId: string) => Promise<CompleteActivityResponse | void>
+  isTogglingActivity: string | null
+  // Legacy aliases
+  toggleHabit: (habitId: string) => Promise<CompleteActivityResponse | void>
   isTogglingHabit: string | null
 }
 
@@ -43,7 +46,7 @@ export function useDashboard(): UseDashboardReturn {
     isLoading: true,
     error: null,
   })
-  const [isTogglingHabit, setIsTogglingHabit] = useState<string | null>(null)
+  const [isTogglingActivity, setIsTogglingActivity] = useState<string | null>(null)
 
   /**
    * Fetch dashboard data from API
@@ -78,33 +81,33 @@ export function useDashboard(): UseDashboardReturn {
   }, [fetchData])
 
   /**
-   * Toggle habit completion
+   * Toggle activity completion
    * Uses optimistic updates for better UX
    */
-  const toggleHabit = useCallback(
-    async (habitId: string): Promise<CompleteHabitResponse | void> => {
+  const toggleActivity = useCallback(
+    async (activityId: string): Promise<CompleteActivityResponse | void> => {
       if (!state.data) return
 
-      const habit = state.data.todaysHabits.find((h) => h.id === habitId)
-      if (!habit) return
+      const activity = state.data.todaysActivities.find((a) => a.id === activityId)
+      if (!activity) return
 
-      setIsTogglingHabit(habitId)
+      setIsTogglingActivity(activityId)
 
       // Optimistic update
       setState((prev) => {
         if (!prev.data) return prev
 
-        const updatedHabits = prev.data.todaysHabits.map((h) =>
-          h.id === habitId ? { ...h, completedToday: !h.completedToday } : h
+        const updatedActivities = prev.data.todaysActivities.map((a) =>
+          a.id === activityId ? { ...a, completedToday: !a.completedToday } : a
         )
 
-        const completedCount = updatedHabits.filter((h) => h.completedToday).length
+        const completedCount = updatedActivities.filter((a) => a.completedToday).length
 
         return {
           ...prev,
           data: {
             ...prev.data,
-            todaysHabits: updatedHabits,
+            todaysActivities: updatedActivities,
             stats: {
               ...prev.data.stats,
               completedToday: completedCount,
@@ -114,35 +117,23 @@ export function useDashboard(): UseDashboardReturn {
       })
 
       try {
-        if (habit.completedToday) {
-          await uncompleteHabit(habitId)
+        if (activity.completedToday) {
+          await uncompleteActivity(activityId)
         } else {
-          const response = await completeHabit(habitId)
-          setIsTogglingHabit(null)
+          const response = await completeActivity(activityId)
+          setIsTogglingActivity(null)
 
-          // Update habitanimal XP and level from response
+          // Update stats from response
           setState((prev) => {
             if (!prev.data) return prev
-
-            const updatedHabitanimals = prev.data.habitanimals.map((ha) =>
-              ha.id === response.habitanimal.id
-                ? {
-                    ...ha,
-                    xp: response.habitanimal.xp,
-                    level: response.habitanimal.level,
-                    health: response.habitanimal.health,
-                  }
-                : ha
-            )
 
             return {
               ...prev,
               data: {
                 ...prev.data,
-                habitanimals: updatedHabitanimals,
                 stats: {
                   ...prev.data.stats,
-                  totalXp: prev.data.stats.totalXp + response.completion.xpEarned,
+                  totalXp: (prev.data.stats.totalXp || 0) + response.pointsEarned,
                 },
               },
             }
@@ -155,17 +146,17 @@ export function useDashboard(): UseDashboardReturn {
         setState((prev) => {
           if (!prev.data) return prev
 
-          const revertedHabits = prev.data.todaysHabits.map((h) =>
-            h.id === habitId ? { ...h, completedToday: habit.completedToday } : h
+          const revertedActivities = prev.data.todaysActivities.map((a) =>
+            a.id === activityId ? { ...a, completedToday: activity.completedToday } : a
           )
 
-          const completedCount = revertedHabits.filter((h) => h.completedToday).length
+          const completedCount = revertedActivities.filter((a) => a.completedToday).length
 
           return {
             ...prev,
             data: {
               ...prev.data,
-              todaysHabits: revertedHabits,
+              todaysActivities: revertedActivities,
               stats: {
                 ...prev.data.stats,
                 completedToday: completedCount,
@@ -176,11 +167,14 @@ export function useDashboard(): UseDashboardReturn {
 
         throw error
       } finally {
-        setIsTogglingHabit(null)
+        setIsTogglingActivity(null)
       }
     },
     [state.data]
   )
+
+  // Legacy alias
+  const toggleHabit = toggleActivity
 
   // Fetch data on mount
   useEffect(() => {
@@ -190,7 +184,10 @@ export function useDashboard(): UseDashboardReturn {
   return {
     ...state,
     refetch,
+    toggleActivity,
+    isTogglingActivity,
+    // Legacy aliases
     toggleHabit,
-    isTogglingHabit,
+    isTogglingHabit: isTogglingActivity,
   }
 }

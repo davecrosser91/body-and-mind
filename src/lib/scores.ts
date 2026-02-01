@@ -1,8 +1,8 @@
 import { prisma } from './db';
-import { Pillar, SubCategory } from '@prisma/client';
+import { Pillar } from '@prisma/client';
 
 // Category to Pillar/SubCategory mapping for migration
-export const CATEGORY_MAPPING: Record<string, { pillar: Pillar; subCategory: SubCategory }> = {
+export const CATEGORY_MAPPING: Record<string, { pillar: Pillar; subCategory: string }> = {
   FITNESS: { pillar: 'BODY', subCategory: 'TRAINING' },
   SLEEP: { pillar: 'BODY', subCategory: 'SLEEP' },
   NUTRITION: { pillar: 'BODY', subCategory: 'NUTRITION' },
@@ -48,11 +48,11 @@ interface DailyScoreResult {
 }
 
 /**
- * Calculate completion percentage for habits in a specific sub-category
+ * Calculate completion percentage for activities in a specific sub-category
  */
 async function getSubCategoryCompletionScore(
   userId: string,
-  subCategory: SubCategory,
+  subCategory: string,
   date: Date
 ): Promise<number> {
   const startOfDay = new Date(date);
@@ -61,8 +61,8 @@ async function getSubCategoryCompletionScore(
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
 
-  // Get all active habits in this sub-category
-  const habits = await prisma.habit.findMany({
+  // Get all active activities in this sub-category
+  const activities = await prisma.activity.findMany({
     where: {
       userId,
       subCategory,
@@ -80,15 +80,15 @@ async function getSubCategoryCompletionScore(
     },
   });
 
-  if (habits.length === 0) return 0;
+  if (activities.length === 0) return 0;
 
   // Calculate completion percentage
-  const completedCount = habits.filter((h: typeof habits[number]) => h.completions.length > 0).length;
-  let score = (completedCount / habits.length) * 100;
+  const completedCount = activities.filter((a: typeof activities[number]) => a.completions.length > 0).length;
+  let score = (completedCount / activities.length) * 100;
 
   // Bonus: +10 points if any completion has details
-  const hasDetails = habits.some((h: typeof habits[number]) =>
-    h.completions.some((c: typeof h.completions[number]) => c.details && c.details.length > 0)
+  const hasDetails = activities.some((a: typeof activities[number]) =>
+    a.completions.some((c: typeof a.completions[number]) => c.details && c.details.length > 0)
   );
   if (hasDetails) {
     score = Math.min(100, score + 10);

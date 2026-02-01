@@ -80,23 +80,34 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const now = new Date()
     const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
 
-    // Get related habits for this habitanimal type
-    const relatedHabits = await prisma.habit.findMany({
+    // Get related activities for this habitanimal type (map type to pillar)
+    const typeToConfig: Record<string, { pillar: 'BODY' | 'MIND'; subCategories: string[] }> = {
+      FITNESS: { pillar: 'BODY', subCategories: ['TRAINING', 'FITNESS'] },
+      SLEEP: { pillar: 'BODY', subCategories: ['SLEEP'] },
+      NUTRITION: { pillar: 'BODY', subCategories: ['NUTRITION'] },
+      MINDFULNESS: { pillar: 'MIND', subCategories: ['MEDITATION', 'MINDFULNESS'] },
+      LEARNING: { pillar: 'MIND', subCategories: ['LEARNING', 'READING', 'JOURNALING'] },
+    }
+
+    const config = typeToConfig[habitanimal.type] || { pillar: 'BODY', subCategories: [] }
+
+    const relatedActivities = await prisma.activity.findMany({
       where: {
         userId: user.id,
-        category: habitanimal.type,
+        pillar: config.pillar,
+        subCategory: { in: config.subCategories },
       },
       select: {
         id: true,
       },
     })
 
-    const habitIds = relatedHabits.map((h) => h.id)
+    const activityIds = relatedActivities.map((a: { id: string }) => a.id)
 
     // Fetch completions for the time period
-    const completions = await prisma.habitCompletion.findMany({
+    const completions = await prisma.activityCompletion.findMany({
       where: {
-        habitId: { in: habitIds },
+        activityId: { in: activityIds },
         completedAt: {
           gte: startDate,
         },
@@ -109,7 +120,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       string,
       { count: number; xpEarned: number }
     >()
-    completions.forEach((c) => {
+    completions.forEach((c: { completedAt: Date; pointsEarned: number }) => {
       const dateStr = c.completedAt.toISOString().split('T')[0] as string
       const existing = completionsByDate.get(dateStr) || {
         count: 0,
@@ -117,7 +128,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       }
       completionsByDate.set(dateStr, {
         count: existing.count + 1,
-        xpEarned: existing.xpEarned + c.xpEarned,
+        xpEarned: existing.xpEarned + c.pointsEarned,
       })
     })
 

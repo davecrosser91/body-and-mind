@@ -1,8 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pillar, SubCategory, Frequency } from '@prisma/client';
+import { Pillar, Frequency } from '@prisma/client';
+import { useAuth } from '@/hooks/useAuth';
+
+// SubCategory is now a string type
+type SubCategory = 'TRAINING' | 'SLEEP' | 'NUTRITION' | 'MEDITATION' | 'READING' | 'LEARNING' | 'JOURNALING';
 
 export interface CreateHabitFormData {
   name: string;
@@ -61,6 +66,7 @@ export function CreateHabitModalNew({
   onClose,
   onCreated,
 }: CreateHabitModalNewProps) {
+  const { token } = useAuth();
   const [formData, setFormData] = useState<CreateHabitFormData>({
     name: '',
     pillar: 'BODY',
@@ -70,6 +76,13 @@ export function CreateHabitModalNew({
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Handle SSR - only render portal on client
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -103,19 +116,18 @@ export function CreateHabitModalNew({
     setError(null);
 
     try {
-      const response = await fetch('/api/v1/habits', {
+      const response = await fetch('/api/v1/activities', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           name: formData.name.trim(),
           pillar: formData.pillar,
           subCategory: formData.subCategory,
           description: formData.description?.trim() || null,
           frequency: formData.frequency.toLowerCase(),
-          // Keep category for backward compatibility
-          category: formData.pillar === 'BODY'
-            ? (formData.subCategory === 'TRAINING' ? 'FITNESS' : formData.subCategory)
-            : (formData.subCategory === 'MEDITATION' ? 'MINDFULNESS' : 'LEARNING'),
         }),
       });
 
@@ -136,7 +148,10 @@ export function CreateHabitModalNew({
 
   const pillarConfig = PILLAR_CONFIG[formData.pillar];
 
-  return (
+  // Don't render on server or when not mounted
+  if (!mounted) return null;
+
+  const modalContent = (
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -334,4 +349,6 @@ export function CreateHabitModalNew({
       )}
     </AnimatePresence>
   );
+
+  return createPortal(modalContent, document.body);
 }

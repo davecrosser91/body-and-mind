@@ -4,7 +4,7 @@
  * Provides typed fetch functions for communicating with the backend API
  */
 
-import type { Habitanimal, Habit, HabitCompletion, User } from '@/types'
+import type { Habitanimal, Activity, ActivityCompletion, User } from '@/types'
 
 const API_BASE = '/api/v1'
 
@@ -64,15 +64,14 @@ async function apiFetch<T>(
 export interface DashboardData {
   user: User
   stats: {
-    totalHabits: number
+    totalActivities: number
     completedToday: number
     currentStreak: number
     totalXp: number
   }
   habitanimals: Habitanimal[]
-  todaysHabits: Array<
-    Habit & {
-      habitanimal: Pick<Habitanimal, 'id' | 'name' | 'species'>
+  todaysActivities: Array<
+    Activity & {
       completedToday: boolean
     }
   >
@@ -102,60 +101,54 @@ export async function fetchHabitanimal(id: string): Promise<Habitanimal> {
 }
 
 /**
- * Fetch all habits for the current user
+ * Fetch all activities for the current user
  */
-export async function fetchHabits(): Promise<Habit[]> {
-  const response = await apiFetch<{ habits: Habit[] }>('/habits')
-  return response.habits
+export async function fetchActivities(habitsOnly?: boolean): Promise<Activity[]> {
+  const endpoint = habitsOnly ? '/activities?habitsOnly=true' : '/activities'
+  const response = await apiFetch<Activity[]>(endpoint)
+  return response
 }
 
 /**
- * Fetch habits for a specific habitanimal
+ * Complete activity response type
  */
-export async function fetchHabitsByHabitanimal(habitanimalId: string): Promise<Habit[]> {
-  const response = await apiFetch<{ habits: Habit[] }>(
-    `/habitanimals/${habitanimalId}/habits`
-  )
-  return response.habits
+export interface CompleteActivityResponse {
+  id: string
+  activityId: string
+  completedAt: string
+  pointsEarned: number
+  details: string | null
+  source: string
 }
 
 /**
- * Complete habit response type
- */
-export interface CompleteHabitResponse {
-  completion: HabitCompletion
-  habitanimal: {
-    id: string
-    xp: number
-    level: number
-    health: number
-    leveledUp: boolean
-  }
-}
-
-/**
- * Mark a habit as completed
+ * Mark an activity as completed
  *
- * @param habitId - The ID of the habit to complete
+ * @param activityId - The ID of the activity to complete
  * @param details - Optional details/notes about the completion
  */
-export async function completeHabit(
-  habitId: string,
+export async function completeActivity(
+  activityId: string,
   details?: string
-): Promise<CompleteHabitResponse> {
-  return apiFetch<CompleteHabitResponse>(`/habits/${habitId}/complete`, {
+): Promise<CompleteActivityResponse> {
+  return apiFetch<CompleteActivityResponse>(`/activities/${activityId}/complete`, {
     method: 'POST',
     body: JSON.stringify({ details }),
   })
 }
 
 /**
- * Uncomplete a habit (remove today's completion)
+ * Uncomplete an activity (remove today's completion)
  *
- * @param habitId - The ID of the habit to uncomplete
+ * @param activityId - The ID of the activity to uncomplete
  */
-export async function uncompleteHabit(habitId: string): Promise<void> {
-  await apiFetch(`/habits/${habitId}/complete`, {
+export async function uncompleteActivity(activityId: string): Promise<void> {
+  await apiFetch(`/activities/${activityId}/complete`, {
     method: 'DELETE',
   })
 }
+
+// Legacy aliases for backward compatibility
+export const completeHabit = completeActivity
+export const uncompleteHabit = uncompleteActivity
+export type CompleteHabitResponse = CompleteActivityResponse

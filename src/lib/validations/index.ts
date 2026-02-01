@@ -18,23 +18,8 @@ export {
   type UpdateProfileInput,
 } from './auth'
 
-// Habit schemas
-export {
-  habitFrequencySchema,
-  createHabitSchema,
-  updateHabitSchema,
-  habitIdParamSchema,
-  listHabitsQuerySchema,
-  completeHabitSchema,
-  listCompletionsQuerySchema,
-  type HabitFrequency,
-  type CreateHabitInput,
-  type UpdateHabitInput,
-  type HabitIdParam,
-  type ListHabitsQuery,
-  type CompleteHabitInput,
-  type ListCompletionsQuery,
-} from './habit'
+// Activity schemas - moved from habit.ts to activity.ts
+// (schemas removed - API validation is now inline in route handlers)
 
 // Habitanimal schemas
 export {

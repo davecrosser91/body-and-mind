@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Pillar, SubCategory } from '@prisma/client';
+import { Pillar } from '@prisma/client';
+import type { SubCategory } from './CreateHabitWizard/types';
 
 interface HabitCardProps {
   id: string;

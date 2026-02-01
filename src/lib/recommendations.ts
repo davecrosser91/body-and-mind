@@ -12,7 +12,9 @@ import { prisma } from './db';
 import { getDailyStatus } from './daily-status';
 import { getActiveStacks, HabitStackWithActivities, ActivityInStack } from './habit-stacks';
 import { getDailyQuote } from './quotes';
-import { SubCategory } from '@prisma/client';
+
+// SubCategory is now a string, not an enum
+type SubCategory = 'TRAINING' | 'MEDITATION' | 'READING' | 'NUTRITION' | 'LEARNING' | 'SLEEP' | 'JOURNALING';
 
 // ============ TYPES ============
 
@@ -61,38 +63,38 @@ export interface Recommendation {
  * These are short, easy-to-complete activities for each pillar
  */
 export const QUICK_ACTIONS: Record<SubCategory, QuickAction> = {
-  [SubCategory.TRAINING]: {
-    activity: SubCategory.TRAINING,
+  TRAINING: {
+    activity: 'TRAINING',
     label: 'Quick stretch',
     duration: '2 min',
   },
-  [SubCategory.MEDITATION]: {
-    activity: SubCategory.MEDITATION,
+  MEDITATION: {
+    activity: 'MEDITATION',
     label: 'Breathe',
     duration: '2 min',
   },
-  [SubCategory.READING]: {
-    activity: SubCategory.READING,
+  READING: {
+    activity: 'READING',
     label: 'Read 1 page',
     duration: '2 min',
   },
-  [SubCategory.NUTRITION]: {
-    activity: SubCategory.NUTRITION,
+  NUTRITION: {
+    activity: 'NUTRITION',
     label: 'Log a meal',
     duration: '1 min',
   },
-  [SubCategory.LEARNING]: {
-    activity: SubCategory.LEARNING,
+  LEARNING: {
+    activity: 'LEARNING',
     label: 'Quick lesson',
     duration: '5 min',
   },
-  [SubCategory.SLEEP]: {
-    activity: SubCategory.SLEEP,
+  SLEEP: {
+    activity: 'SLEEP',
     label: 'Log sleep',
     duration: '1 min',
   },
-  [SubCategory.JOURNALING]: {
-    activity: SubCategory.JOURNALING,
+  JOURNALING: {
+    activity: 'JOURNALING',
     label: 'Quick journal',
     duration: '3 min',
   },
@@ -108,16 +110,16 @@ const RECOVERY_YELLOW_THRESHOLD = 34;
  * Categories by pillar for filtering
  */
 const BODY_CATEGORIES: SubCategory[] = [
-  SubCategory.TRAINING,
-  SubCategory.SLEEP,
-  SubCategory.NUTRITION,
+  'TRAINING',
+  'SLEEP',
+  'NUTRITION',
 ];
 
 const MIND_CATEGORIES: SubCategory[] = [
-  SubCategory.MEDITATION,
-  SubCategory.READING,
-  SubCategory.LEARNING,
-  SubCategory.JOURNALING,
+  'MEDITATION',
+  'READING',
+  'LEARNING',
+  'JOURNALING',
 ];
 
 // ============ HELPER FUNCTIONS ============
@@ -141,24 +143,24 @@ function getRecoverySuggestion(
     case 'green':
       return {
         suggestion: 'Great recovery! Push yourself today.',
-        suggestedActivities: [SubCategory.TRAINING, SubCategory.LEARNING],
+        suggestedActivities: ['TRAINING', 'LEARNING'],
       };
     case 'yellow':
       return {
         suggestion: 'Moderate recovery. Balance intensity.',
         suggestedActivities: [
-          SubCategory.TRAINING,
-          SubCategory.MEDITATION,
-          SubCategory.READING,
+          'TRAINING',
+          'MEDITATION',
+          'READING',
         ],
       };
     case 'red':
       return {
         suggestion: 'Rest day recommended. Focus on Mind.',
         suggestedActivities: [
-          SubCategory.MEDITATION,
-          SubCategory.READING,
-          SubCategory.SLEEP,
+          'MEDITATION',
+          'READING',
+          'SLEEP',
         ],
       };
     default:
@@ -170,7 +172,7 @@ function getRecoverySuggestion(
 }
 
 /**
- * Get incomplete categories for the day based on habits
+ * Get incomplete categories for the day based on activities
  */
 async function getIncompleteCategories(
   userId: string
@@ -181,8 +183,8 @@ async function getIncompleteCategories(
   const todayEnd = new Date(now);
   todayEnd.setHours(23, 59, 59, 999);
 
-  // Get habits with today's completions
-  const habits = await prisma.habit.findMany({
+  // Get activities with today's completions
+  const activities = await prisma.activity.findMany({
     where: {
       userId,
       archived: false,
@@ -201,10 +203,10 @@ async function getIncompleteCategories(
   });
 
   // Collect completed subcategories
-  const completedSubCategories = new Set<SubCategory>();
-  for (const habit of habits) {
-    if (habit.completions.length > 0 && habit.subCategory) {
-      completedSubCategories.add(habit.subCategory);
+  const completedSubCategories = new Set<string>();
+  for (const activity of activities) {
+    if (activity.completions.length > 0 && activity.subCategory) {
+      completedSubCategories.add(activity.subCategory);
     }
   }
 
@@ -236,13 +238,15 @@ function getQuickActionsForIncomplete(
   // If body pillar not completed, suggest body activities
   if (!bodyCompleted) {
     // Prioritize TRAINING
-    if (incompleteBody.includes(SubCategory.TRAINING)) {
-      actions.push(QUICK_ACTIONS[SubCategory.TRAINING]);
+    if (incompleteBody.includes('TRAINING')) {
+      const action = QUICK_ACTIONS['TRAINING'];
+      if (action) actions.push(action);
     } else if (incompleteBody.length > 0) {
       // Add first incomplete body activity
       const first = incompleteBody[0];
       if (first) {
-        actions.push(QUICK_ACTIONS[first]);
+        const action = QUICK_ACTIONS[first];
+        if (action) actions.push(action);
       }
     }
   }
@@ -250,13 +254,15 @@ function getQuickActionsForIncomplete(
   // If mind pillar not completed, suggest mind activities
   if (!mindCompleted) {
     // Prioritize MEDITATION
-    if (incompleteMind.includes(SubCategory.MEDITATION)) {
-      actions.push(QUICK_ACTIONS[SubCategory.MEDITATION]);
+    if (incompleteMind.includes('MEDITATION')) {
+      const action = QUICK_ACTIONS['MEDITATION'];
+      if (action) actions.push(action);
     } else if (incompleteMind.length > 0) {
       // Add first incomplete mind activity
       const first = incompleteMind[0];
       if (first) {
-        actions.push(QUICK_ACTIONS[first]);
+        const action = QUICK_ACTIONS[first];
+        if (action) actions.push(action);
       }
     }
   }

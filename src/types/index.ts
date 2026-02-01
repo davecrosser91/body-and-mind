@@ -21,17 +21,30 @@ export interface Habitanimal {
   level: number
 }
 
-export interface Habit {
+export interface Activity {
   id: string
   name: string
+  pillar: 'BODY' | 'MIND'
+  subCategory: string
+  frequency: 'DAILY' | 'WEEKLY' | 'CUSTOM'
   description: string | null
-  frequency: 'daily' | 'weekly' | 'monthly'
-  habitanimalId: string
+  points: number
+  isHabit: boolean
+  cueType?: 'TIME' | 'LOCATION' | 'AFTER_ACTIVITY' | null
+  cueValue?: string | null
+  createdAt: Date
+  updatedAt: Date
 }
 
-export interface HabitCompletion {
+export interface ActivityCompletion {
   id: string
-  habitId: string
+  activityId: string
   completedAt: Date
-  xpEarned: number
+  pointsEarned: number
+  details?: string | null
+  source: 'MANUAL' | 'WHOOP' | 'APPLE_HEALTH'
 }
+
+// Legacy aliases for backward compatibility during migration
+export type Habit = Activity
+export type HabitCompletion = ActivityCompletion

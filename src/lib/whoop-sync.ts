@@ -1,7 +1,7 @@
 /**
  * Whoop Data Sync Service
  *
- * Syncs sleep and workout data from Whoop to create HabitCompletions
+ * Syncs sleep and workout data from Whoop to create ActivityCompletions
  * and award XP to appropriate Habitanimals.
  */
 
@@ -176,7 +176,7 @@ async function isAlreadySynced(
   whoopId: number,
   dataType: 'sleep' | 'workout'
 ): Promise<boolean> {
-  const existing = await prisma.habitCompletion.findFirst({
+  const existing = await prisma.activityCompletion.findFirst({
     where: {
       source: 'WHOOP',
       details: {
@@ -239,35 +239,39 @@ async function awardXPToHabitanimal(
 }
 
 /**
- * Get or create a system habit for Whoop data syncing
+ * Get or create a system activity for Whoop data syncing
  */
-async function getOrCreateWhoopHabit(
+async function getOrCreateWhoopActivity(
   userId: string,
-  category: 'SLEEP' | 'FITNESS'
+  subCategory: 'SLEEP' | 'TRAINING'
 ): Promise<string> {
-  const habitName = category === 'SLEEP' ? 'Whoop Sleep Tracking' : 'Whoop Workout Tracking'
+  const activityName = subCategory === 'SLEEP' ? 'Whoop Sleep Tracking' : 'Whoop Workout Tracking'
+  const pillar = subCategory === 'SLEEP' ? 'BODY' : 'BODY' as const
 
-  let habit = await prisma.habit.findFirst({
+  let activity = await prisma.activity.findFirst({
     where: {
       userId,
-      name: habitName,
-      category,
+      name: activityName,
+      subCategory,
     },
   })
 
-  if (!habit) {
-    habit = await prisma.habit.create({
+  if (!activity) {
+    activity = await prisma.activity.create({
       data: {
         userId,
-        name: habitName,
-        category,
+        name: activityName,
+        pillar,
+        subCategory,
         description: `Automatically synced from Whoop`,
         frequency: 'DAILY',
+        points: 25,
+        isHabit: true,
       },
     })
   }
 
-  return habit.id
+  return activity.id
 }
 
 // ============ MAIN SYNC FUNCTION ============
@@ -279,7 +283,7 @@ async function getOrCreateWhoopHabit(
  * 2. Refresh token if expired
  * 3. Fetch sleep data from last sync (or last 7 days if first sync)
  * 4. Fetch workout data from last sync
- * 5. Create HabitCompletions for new data (source: WHOOP)
+ * 5. Create ActivityCompletions for new data (source: WHOOP)
  * 6. Award XP to appropriate Habitanimals
  * 7. Update lastSync timestamp
  * 8. Return summary
@@ -338,7 +342,7 @@ export async function syncWhoopData(userId: string): Promise<SyncResult> {
   // 3. Fetch and process sleep data
   try {
     const sleepResponse = await whoopFetch<WhoopPaginatedResponse<WhoopSleep>>(
-      `/activity/sleep?start=${startParam}&end=${endParam}`,
+      `/developer/v2/activity/sleep?start=${startParam}&end=${endParam}`,
       accessToken
     )
 
@@ -346,7 +350,7 @@ export async function syncWhoopData(userId: string): Promise<SyncResult> {
     let recoveryMap: Map<number, WhoopRecovery> = new Map()
     try {
       const recoveryResponse = await whoopFetch<WhoopPaginatedResponse<WhoopRecovery>>(
-        `/recovery?start=${startParam}&end=${endParam}`,
+        `/developer/v2/recovery?start=${startParam}&end=${endParam}`,
         accessToken
       )
       recoveryResponse.records.forEach((recovery) => {
@@ -356,7 +360,7 @@ export async function syncWhoopData(userId: string): Promise<SyncResult> {
       // Recovery data is optional, continue without it
     }
 
-    const sleepHabitId = await getOrCreateWhoopHabit(userId, 'SLEEP')
+    const sleepActivityId = await getOrCreateWhoopActivity(userId, 'SLEEP')
 
     for (const sleep of sleepResponse.records) {
       // Skip if already synced
@@ -373,10 +377,10 @@ export async function syncWhoopData(userId: string): Promise<SyncResult> {
       // Create completion record
       const sleepHours = sleep.score.stage_summary.total_in_bed_time_milli / MILLIS_PER_HOUR
 
-      await prisma.habitCompletion.create({
+      await prisma.activityCompletion.create({
         data: {
-          habitId: sleepHabitId,
-          xpEarned: xp,
+          activityId: sleepActivityId,
+          pointsEarned: xp,
           source: 'WHOOP',
           completedAt: new Date(sleep.end),
           details: createCompletionDetails(sleep.id, 'sleep', {
@@ -404,11 +408,11 @@ export async function syncWhoopData(userId: string): Promise<SyncResult> {
   // 4. Fetch and process workout data
   try {
     const workoutResponse = await whoopFetch<WhoopPaginatedResponse<WhoopWorkout>>(
-      `/activity/workout?start=${startParam}&end=${endParam}`,
+      `/developer/v2/activity/workout?start=${startParam}&end=${endParam}`,
       accessToken
     )
 
-    const fitnessHabitId = await getOrCreateWhoopHabit(userId, 'FITNESS')
+    const fitnessActivityId = await getOrCreateWhoopActivity(userId, 'TRAINING')
 
     for (const workout of workoutResponse.records) {
       // Skip if already synced
@@ -424,10 +428,10 @@ export async function syncWhoopData(userId: string): Promise<SyncResult> {
       const endTime = new Date(workout.end).getTime()
       const durationMinutes = Math.round((endTime - startTime) / 60000)
 
-      await prisma.habitCompletion.create({
+      await prisma.activityCompletion.create({
         data: {
-          habitId: fitnessHabitId,
-          xpEarned: xp,
+          activityId: fitnessActivityId,
+          pointsEarned: xp,
           source: 'WHOOP',
           completedAt: new Date(workout.end),
           details: createCompletionDetails(workout.id, 'workout', {

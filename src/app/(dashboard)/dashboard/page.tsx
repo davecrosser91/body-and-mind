@@ -3,7 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { Pillar, SubCategory } from '@prisma/client';
+import { Pillar } from '@prisma/client';
+
+// SubCategory is now a string type (no longer Prisma enum)
+type SubCategory = 'TRAINING' | 'SLEEP' | 'NUTRITION' | 'MEDITATION' | 'READING' | 'LEARNING' | 'JOURNALING';
 
 // Daily components
 import {
@@ -18,6 +21,12 @@ import { HabitListNew, HabitNew } from '@/components/habits';
 // UI components
 import { GlassCard } from '@/components/ui/GlassCard';
 import { EmberBar } from '@/components/scores/EmberBar';
+
+// Whoop components
+import { RecoveryCard, SleepCard, TrainingCard, WhoopConnectedCard } from '@/components/whoop';
+
+// Auth
+import { useAuth } from '@/hooks/useAuth';
 
 // ============ TYPES ============
 
@@ -42,6 +51,29 @@ interface DailyStatusData {
     score: number | null;
     zone: 'green' | 'yellow' | 'red' | null;
     recommendation: string | null;
+    hrv: number | null;
+    restingHeartRate: number | null;
+  } | null;
+  whoop: {
+    connected: boolean;
+    lastSync: string | null;
+    sleep: {
+      hours: number;
+      efficiency: number;
+      remHours: number;
+      deepHours: number;
+      performance: number;
+    } | null;
+    training: {
+      strain: number;
+      calories: number;
+      workouts: {
+        name: string;
+        strain: number;
+        duration: number;
+        calories: number;
+      }[];
+    } | null;
   } | null;
   quote: {
     text: string;
@@ -115,32 +147,6 @@ function categoryToSubCategory(category: string): SubCategory {
   return categoryMap[category.toUpperCase()] || 'TRAINING';
 }
 
-function getRecoveryZoneColor(zone: 'green' | 'yellow' | 'red' | null): string {
-  switch (zone) {
-    case 'green':
-      return 'text-emerald-400';
-    case 'yellow':
-      return 'text-amber-400';
-    case 'red':
-      return 'text-red-400';
-    default:
-      return 'text-text-muted';
-  }
-}
-
-function getRecoveryZoneBg(zone: 'green' | 'yellow' | 'red' | null): string {
-  switch (zone) {
-    case 'green':
-      return 'bg-emerald-500/10 border-emerald-500/20';
-    case 'yellow':
-      return 'bg-amber-500/10 border-amber-500/20';
-    case 'red':
-      return 'bg-red-500/10 border-red-500/20';
-    default:
-      return 'bg-surface-light border-white/5';
-  }
-}
-
 // ============ LOADING SKELETON ============
 
 function DashboardSkeleton() {
@@ -176,6 +182,7 @@ function DashboardSkeleton() {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { token } = useAuth();
 
   // State
   const [isLoading, setIsLoading] = useState(true);
@@ -186,11 +193,15 @@ export default function DashboardPage() {
 
   // Fetch all data
   const fetchData = useCallback(async () => {
+    if (!token) return;
+
+    const headers = { Authorization: `Bearer ${token}` };
+
     try {
       const [statusRes, recsRes, habitsRes] = await Promise.all([
-        fetch('/api/v1/daily-status'),
-        fetch('/api/v1/recommendations'),
-        fetch('/api/v1/habits'),
+        fetch('/api/v1/daily-status', { headers }),
+        fetch('/api/v1/recommendations', { headers }),
+        fetch('/api/v1/habits', { headers }),
       ]);
 
       if (statusRes.ok) {
@@ -220,18 +231,24 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (token) {
+      fetchData();
+    }
+  }, [fetchData, token]);
 
   // Refresh data after actions
   const refreshData = useCallback(async () => {
+    if (!token) return;
+
+    const headers = { Authorization: `Bearer ${token}` };
+
     // Fetch fresh status and recommendations
     const [statusRes, recsRes] = await Promise.all([
-      fetch('/api/v1/daily-status'),
-      fetch('/api/v1/recommendations'),
+      fetch('/api/v1/daily-status', { headers }),
+      fetch('/api/v1/recommendations', { headers }),
     ]);
 
     if (statusRes.ok) {
@@ -243,10 +260,12 @@ export default function DashboardPage() {
       const recsData = await recsRes.json();
       setRecommendations(recsData.data);
     }
-  }, []);
+  }, [token]);
 
   // Handle quick action (log activity)
   const handleQuickAction = async (activity: string) => {
+    if (!token) return;
+
     setQuickActionLoading(true);
     try {
       // Determine pillar from activity
@@ -255,7 +274,10 @@ export default function DashboardPage() {
 
       const res = await fetch('/api/v1/activities', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           pillar,
           category: activity,
@@ -276,10 +298,15 @@ export default function DashboardPage() {
 
   // Handle habit completion
   const handleHabitComplete = async (habitId: string, details?: string) => {
+    if (!token) return;
+
     try {
       const res = await fetch(`/api/v1/habits/${habitId}/complete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ details }),
       });
 
@@ -298,9 +325,12 @@ export default function DashboardPage() {
 
   // Handle habit uncomplete
   const handleHabitUncomplete = async (habitId: string) => {
+    if (!token) return;
+
     try {
       const res = await fetch(`/api/v1/habits/${habitId}/complete`, {
         method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (res.ok) {
@@ -404,60 +434,61 @@ export default function DashboardPage() {
         />
       </motion.section>
 
-      {/* Recovery Card (if Whoop connected) */}
-      {dailyStatus?.recovery && dailyStatus.recovery.score !== null && (
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-        >
-          <GlassCard
-            hover={false}
-            className={`p-4 border ${getRecoveryZoneBg(dailyStatus.recovery.zone)}`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-surface-lighter flex items-center justify-center">
-                  <svg
-                    className="w-5 h-5 text-text-secondary"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm text-text-muted">Whoop Recovery</p>
-                  <p className="text-xs text-text-muted mt-0.5">
-                    {dailyStatus.recovery.recommendation}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <span
-                  className={`text-2xl font-bold ${getRecoveryZoneColor(
-                    dailyStatus.recovery.zone
-                  )}`}
-                >
-                  {dailyStatus.recovery.score}%
-                </span>
-                <p
-                  className={`text-xs capitalize ${getRecoveryZoneColor(
-                    dailyStatus.recovery.zone
-                  )}`}
-                >
-                  {dailyStatus.recovery.zone} zone
-                </p>
-              </div>
-            </div>
-          </GlassCard>
-        </motion.section>
+      {/* Whoop Data Cards (if connected) */}
+      {dailyStatus?.whoop?.connected && (
+        <>
+          {/* Show "Whoop Connected" if no data available */}
+          {!dailyStatus?.recovery?.score && !dailyStatus.whoop.sleep && !dailyStatus.whoop.training?.workouts?.length && (
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+            >
+              <WhoopConnectedCard lastSync={dailyStatus.whoop.lastSync} />
+            </motion.section>
+          )}
+
+          {/* Recovery Card */}
+          {dailyStatus?.recovery && dailyStatus.recovery.score !== null && dailyStatus.recovery.zone && (
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+            >
+              <RecoveryCard
+                data={{
+                  score: dailyStatus.recovery.score,
+                  zone: dailyStatus.recovery.zone,
+                  hrv: dailyStatus.recovery.hrv,
+                  restingHeartRate: dailyStatus.recovery.restingHeartRate,
+                  recommendation: dailyStatus.recovery.recommendation,
+                }}
+              />
+            </motion.section>
+          )}
+
+          {/* Sleep Card */}
+          {dailyStatus.whoop.sleep && (
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.28 }}
+            >
+              <SleepCard data={dailyStatus.whoop.sleep} />
+            </motion.section>
+          )}
+
+          {/* Training Card */}
+          {dailyStatus.whoop.training && dailyStatus.whoop.training.strain > 0 && (
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.31 }}
+            >
+              <TrainingCard data={dailyStatus.whoop.training} />
+            </motion.section>
+          )}
+        </>
       )}
 
       {/* Quick Actions (if streak at risk) */}

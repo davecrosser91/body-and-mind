@@ -57,11 +57,22 @@ export async function GET(
       return notFoundError('Habitanimal not found')
     }
 
-    // Get related habits for this habitanimal type
-    const relatedHabits = await prisma.habit.findMany({
+    // Get related activities for this habitanimal type (map type to pillar)
+    const typeToConfig: Record<string, { pillar: 'BODY' | 'MIND'; subCategories: string[] }> = {
+      FITNESS: { pillar: 'BODY', subCategories: ['TRAINING', 'FITNESS'] },
+      SLEEP: { pillar: 'BODY', subCategories: ['SLEEP'] },
+      NUTRITION: { pillar: 'BODY', subCategories: ['NUTRITION'] },
+      MINDFULNESS: { pillar: 'MIND', subCategories: ['MEDITATION', 'MINDFULNESS'] },
+      LEARNING: { pillar: 'MIND', subCategories: ['LEARNING', 'READING', 'JOURNALING'] },
+    }
+
+    const config = typeToConfig[habitanimal.type] || { pillar: 'BODY', subCategories: [] }
+
+    const relatedActivities = await prisma.activity.findMany({
       where: {
         userId: user.id,
-        category: habitanimal.type,
+        pillar: config.pillar,
+        subCategory: { in: config.subCategories },
         archived: false,
       },
       include: {
@@ -80,7 +91,7 @@ export async function GET(
     const healthHistory = calculateHealthHistory(
       habitanimal.health,
       habitanimal.lastInteraction,
-      relatedHabits.flatMap((h) => h.completions),
+      relatedActivities.flatMap((a: { completions: Array<{ completedAt: Date; pointsEarned: number }> }) => a.completions.map((c) => ({ completedAt: c.completedAt, xpEarned: c.pointsEarned }))),
       7
     )
 
@@ -130,11 +141,11 @@ export async function GET(
       createdAt: habitanimal.createdAt,
       updatedAt: habitanimal.updatedAt,
       healthHistory,
-      relatedHabits: relatedHabits.map((habit) => ({
-        id: habit.id,
-        name: habit.name,
-        category: habit.category,
-        recentCompletions: habit.completions.length,
+      relatedActivities: relatedActivities.map((activity: { id: string; name: string; subCategory: string; completions: Array<unknown> }) => ({
+        id: activity.id,
+        name: activity.name,
+        subCategory: activity.subCategory,
+        recentCompletions: activity.completions.length,
       })),
     }
 

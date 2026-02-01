@@ -1,14 +1,14 @@
 /**
- * Habit Completion Service
+ * Activity Completion Service
  *
- * Core business logic for completing and uncompleting habits.
- * Handles XP calculation, habitanimal updates, level-ups, and evolution detection.
+ * Core business logic for completing and uncompleting activities.
+ * Handles points calculation, habitanimal updates, level-ups, and evolution detection.
  */
 
 import { prisma } from '@/lib/db'
 import { calculateHabitXP, calculateLevel, calculateEvolutionStage } from '@/lib/xp'
 import { recoverHealth } from '@/lib/habitanimal-health'
-import { HabitCompletion, Habitanimal, Habit, Pillar, SubCategory, Category, Source, Frequency } from '@prisma/client'
+import { ActivityCompletion, Habitanimal, Activity, Pillar, Source, Frequency } from '@prisma/client'
 import { updateDailyGoal } from '@/lib/daily-status'
 import { updateStreaksForDate } from '@/lib/streaks'
 
@@ -29,8 +29,8 @@ export interface HabitanimalStateChange {
 }
 
 export interface CompletionResult {
-  completion: HabitCompletion
-  xpEarned: number
+  completion: ActivityCompletion
+  pointsEarned: number
   habitanimal: HabitanimalStateChange
 }
 
@@ -43,7 +43,7 @@ export interface LogActivityInput {
 }
 
 export interface LogActivityResult {
-  habitId: string
+  activityId: string
   completionId: string
   isNew: boolean
 }
@@ -54,12 +54,15 @@ export interface UncompleteResult {
 
 // Custom Errors
 
-export class HabitNotFoundError extends Error {
-  constructor(habitId: string) {
-    super(`Habit not found: ${habitId}`)
-    this.name = 'HabitNotFoundError'
+export class ActivityNotFoundError extends Error {
+  constructor(activityId: string) {
+    super(`Activity not found: ${activityId}`)
+    this.name = 'ActivityNotFoundError'
   }
 }
+
+// Legacy alias
+export const HabitNotFoundError = ActivityNotFoundError
 
 export class HabitanimalNotFoundError extends Error {
   constructor(category: string) {
@@ -69,15 +72,15 @@ export class HabitanimalNotFoundError extends Error {
 }
 
 export class AlreadyCompletedTodayError extends Error {
-  constructor(habitId: string) {
-    super(`Habit already completed today: ${habitId}`)
+  constructor(activityId: string) {
+    super(`Activity already completed today: ${activityId}`)
     this.name = 'AlreadyCompletedTodayError'
   }
 }
 
 export class NoCompletionTodayError extends Error {
-  constructor(habitId: string) {
-    super(`No completion found today for habit: ${habitId}`)
+  constructor(activityId: string) {
+    super(`No completion found today for activity: ${activityId}`)
     this.name = 'NoCompletionTodayError'
   }
 }
@@ -97,14 +100,14 @@ function getTodayBounds(): { start: Date; end: Date } {
 }
 
 /**
- * Check if a habit has been completed today
+ * Check if an activity has been completed today
  */
-async function isCompletedToday(habitId: string): Promise<HabitCompletion | null> {
+async function isCompletedToday(activityId: string): Promise<ActivityCompletion | null> {
   const { start, end } = getTodayBounds()
 
-  return prisma.habitCompletion.findFirst({
+  return prisma.activityCompletion.findFirst({
     where: {
-      habitId,
+      activityId,
       completedAt: {
         gte: start,
         lte: end,
@@ -114,44 +117,56 @@ async function isCompletedToday(habitId: string): Promise<HabitCompletion | null
 }
 
 /**
- * Verify habit exists and belongs to user
+ * Verify activity exists and belongs to user
  */
-async function verifyHabitOwnership(
-  habitId: string,
+async function verifyActivityOwnership(
+  activityId: string,
   userId: string
-): Promise<Habit> {
-  const habit = await prisma.habit.findFirst({
+): Promise<Activity> {
+  const activity = await prisma.activity.findFirst({
     where: {
-      id: habitId,
+      id: activityId,
       userId,
       archived: false,
     },
   })
 
-  if (!habit) {
-    throw new HabitNotFoundError(habitId)
+  if (!activity) {
+    throw new ActivityNotFoundError(activityId)
   }
 
-  return habit
+  return activity
 }
 
 /**
- * Get the habitanimal for a habit's category
+ * Get the habitanimal for a pillar
  */
-async function getHabitanimalForCategory(
+async function getHabitanimalForPillar(
   userId: string,
-  category: string
-): Promise<Habitanimal> {
+  pillar: string
+): Promise<Habitanimal | null> {
+  // Map pillar to habitanimal type
+  // BODY pillars: FITNESS, SLEEP, NUTRITION
+  // MIND pillars: MINDFULNESS, LEARNING
+  const typeMapping: Record<string, string[]> = {
+    BODY: ['FITNESS', 'NUTRITION', 'SLEEP'],
+    MIND: ['MINDFULNESS', 'LEARNING'],
+  }
+
+  const types = typeMapping[pillar] || []
+  if (types.length === 0) {
+    return null
+  }
+
+  // Get the first matching habitanimal
   const habitanimal = await prisma.habitanimal.findFirst({
     where: {
       userId,
-      type: category as Habitanimal['type'],
+      type: {
+        in: types as Habitanimal['type'][],
+      },
     },
   })
-
-  if (!habitanimal) {
-    throw new HabitanimalNotFoundError(category)
-  }
 
   return habitanimal
 }
@@ -159,76 +174,77 @@ async function getHabitanimalForCategory(
 // Main Service Functions
 
 /**
- * Complete a habit for today
+ * Complete an activity for today
  *
- * @param habitId - The ID of the habit to complete
- * @param userId - The ID of the user completing the habit
+ * @param activityId - The ID of the activity to complete
+ * @param userId - The ID of the user completing the activity
  * @param details - Optional details about the completion
- * @returns CompletionResult with completion record, XP earned, and habitanimal state changes
- * @throws HabitNotFoundError if habit doesn't exist or doesn't belong to user
- * @throws HabitanimalNotFoundError if no habitanimal exists for the habit's category
- * @throws AlreadyCompletedTodayError if habit was already completed today
+ * @returns CompletionResult with completion record, points earned, and habitanimal state changes
+ * @throws ActivityNotFoundError if activity doesn't exist or doesn't belong to user
+ * @throws AlreadyCompletedTodayError if activity was already completed today
  */
-export async function completeHabit(
-  habitId: string,
+export async function completeActivity(
+  activityId: string,
   userId: string,
   details?: string
 ): Promise<CompletionResult> {
-  // 1. Verify habit exists and belongs to user
-  const habit = await verifyHabitOwnership(habitId, userId)
+  // 1. Verify activity exists and belongs to user
+  const activity = await verifyActivityOwnership(activityId, userId)
 
-  // 2. Check not already completed today
-  const existingCompletion = await isCompletedToday(habitId)
-  if (existingCompletion) {
-    throw new AlreadyCompletedTodayError(habitId)
+  // 2. Check not already completed today (for habits)
+  if (activity.isHabit) {
+    const existingCompletion = await isCompletedToday(activityId)
+    if (existingCompletion) {
+      throw new AlreadyCompletedTodayError(activityId)
+    }
   }
 
-  // 3. Calculate XP
+  // 3. Calculate points
   const hasDetails = Boolean(details && details.trim().length > 0)
-  const xpEarned = calculateHabitXP(hasDetails)
+  const pointsEarned = hasDetails ? activity.points + 5 : activity.points // Bonus for details
 
-  // 4. Get the habitanimal for this habit's category
-  const habitanimal = await getHabitanimalForCategory(userId, habit.category)
+  // 4. Get the habitanimal for this activity's pillar
+  const habitanimal = await getHabitanimalForPillar(userId, activity.pillar)
 
-  // 5. Calculate new state values
-  const previousXP = habitanimal.xp
-  const newXP = previousXP + xpEarned
-  const previousLevel = calculateLevel(previousXP)
-  const newLevel = calculateLevel(newXP)
-  const previousEvolutionStage = calculateEvolutionStage(previousLevel)
-  const newEvolutionStage = calculateEvolutionStage(newLevel)
-  const previousHealth = habitanimal.health
-  const newHealth = recoverHealth(previousHealth)
+  // 5. Calculate new state values for habitanimal (if found)
+  let habitanimalStateChange: HabitanimalStateChange
 
-  // 6. Create completion and update habitanimal in a transaction
-  const [completion, updatedHabitanimal] = await prisma.$transaction([
-    // Create the completion record
-    prisma.habitCompletion.create({
-      data: {
-        habitId,
-        details: details || null,
-        xpEarned,
-        source: 'MANUAL',
-      },
-    }),
-    // Update the habitanimal
-    prisma.habitanimal.update({
-      where: { id: habitanimal.id },
-      data: {
-        xp: newXP,
-        level: newLevel,
-        evolutionStage: newEvolutionStage,
-        health: newHealth,
-        lastInteraction: new Date(),
-      },
-    }),
-  ])
+  if (habitanimal) {
+    const xpEarned = calculateHabitXP(hasDetails)
+    const previousXP = habitanimal.xp
+    const newXP = previousXP + xpEarned
+    const previousLevel = calculateLevel(previousXP)
+    const newLevel = calculateLevel(newXP)
+    const previousEvolutionStage = calculateEvolutionStage(previousLevel)
+    const newEvolutionStage = calculateEvolutionStage(newLevel)
+    const previousHealth = habitanimal.health
+    const newHealth = recoverHealth(previousHealth)
 
-  // 7. Return all state changes
-  return {
-    completion,
-    xpEarned,
-    habitanimal: {
+    // 6. Create completion and update habitanimal in a transaction
+    const [completion, updatedHabitanimal] = await prisma.$transaction([
+      // Create the completion record
+      prisma.activityCompletion.create({
+        data: {
+          activityId,
+          details: details || null,
+          pointsEarned,
+          source: 'MANUAL',
+        },
+      }),
+      // Update the habitanimal
+      prisma.habitanimal.update({
+        where: { id: habitanimal.id },
+        data: {
+          xp: newXP,
+          level: newLevel,
+          evolutionStage: newEvolutionStage,
+          health: newHealth,
+          lastInteraction: new Date(),
+        },
+      }),
+    ])
+
+    habitanimalStateChange = {
       id: updatedHabitanimal.id,
       previousLevel,
       newLevel,
@@ -240,114 +256,173 @@ export async function completeHabit(
       newEvolutionStage,
       previousHealth,
       newHealth,
-    },
+    }
+
+    return {
+      completion,
+      pointsEarned,
+      habitanimal: habitanimalStateChange,
+    }
+  } else {
+    // No habitanimal found - just create the completion
+    const completion = await prisma.activityCompletion.create({
+      data: {
+        activityId,
+        details: details || null,
+        pointsEarned,
+        source: 'MANUAL',
+      },
+    })
+
+    return {
+      completion,
+      pointsEarned,
+      habitanimal: {
+        id: '',
+        previousLevel: 0,
+        newLevel: 0,
+        previousXP: 0,
+        newXP: 0,
+        leveledUp: false,
+        evolved: false,
+        previousEvolutionStage: 0,
+        newEvolutionStage: 0,
+        previousHealth: 0,
+        newHealth: 0,
+      },
+    }
   }
 }
 
+// Legacy alias
+export const completeHabit = completeActivity
+
 /**
- * Uncomplete a habit (remove today's completion)
+ * Uncomplete an activity (remove today's completion)
  *
- * @param habitId - The ID of the habit to uncomplete
+ * @param activityId - The ID of the activity to uncomplete
  * @param userId - The ID of the user
  * @returns UncompleteResult with updated habitanimal state
- * @throws HabitNotFoundError if habit doesn't exist or doesn't belong to user
+ * @throws ActivityNotFoundError if activity doesn't exist or doesn't belong to user
  * @throws NoCompletionTodayError if no completion exists for today
- * @throws HabitanimalNotFoundError if no habitanimal exists for the habit's category
  */
-export async function uncompleteHabit(
-  habitId: string,
+export async function uncompleteActivity(
+  activityId: string,
   userId: string
 ): Promise<UncompleteResult> {
-  // 1. Verify habit exists and belongs to user
-  const habit = await verifyHabitOwnership(habitId, userId)
+  // 1. Verify activity exists and belongs to user
+  const activity = await verifyActivityOwnership(activityId, userId)
 
   // 2. Find today's completion
-  const todayCompletion = await isCompletedToday(habitId)
+  const todayCompletion = await isCompletedToday(activityId)
   if (!todayCompletion) {
-    throw new NoCompletionTodayError(habitId)
+    throw new NoCompletionTodayError(activityId)
   }
 
-  // 3. Get the habitanimal for this habit's category
-  const habitanimal = await getHabitanimalForCategory(userId, habit.category)
+  // 3. Get the habitanimal for this activity's pillar
+  const habitanimal = await getHabitanimalForPillar(userId, activity.pillar)
 
-  // 4. Calculate reversed state values
-  const xpToRemove = todayCompletion.xpEarned
-  const previousXP = habitanimal.xp
-  const newXP = Math.max(0, previousXP - xpToRemove)
-  const previousLevel = calculateLevel(previousXP)
-  const newLevel = calculateLevel(newXP)
-  const previousEvolutionStage = calculateEvolutionStage(previousLevel)
-  const newEvolutionStage = calculateEvolutionStage(newLevel)
+  if (habitanimal) {
+    // 4. Calculate reversed state values
+    const xpToRemove = Math.floor(todayCompletion.pointsEarned / 2) // Approximate XP from points
+    const previousXP = habitanimal.xp
+    const newXP = Math.max(0, previousXP - xpToRemove)
+    const previousLevel = calculateLevel(previousXP)
+    const newLevel = calculateLevel(newXP)
+    const previousEvolutionStage = calculateEvolutionStage(previousLevel)
+    const newEvolutionStage = calculateEvolutionStage(newLevel)
 
-  // Note: We don't reverse health recovery - that would be punitive
-  // The habitanimal keeps its health but loses the XP
-  const previousHealth = habitanimal.health
-  const newHealth = habitanimal.health
+    // Note: We don't reverse health recovery - that would be punitive
+    const previousHealth = habitanimal.health
+    const newHealth = habitanimal.health
 
-  // 5. Delete completion and update habitanimal in a transaction
-  const [, updatedHabitanimal] = await prisma.$transaction([
-    // Delete the completion record
-    prisma.habitCompletion.delete({
-      where: { id: todayCompletion.id },
-    }),
-    // Update the habitanimal
-    prisma.habitanimal.update({
-      where: { id: habitanimal.id },
-      data: {
-        xp: newXP,
-        level: newLevel,
-        evolutionStage: newEvolutionStage,
-        // Don't update lastInteraction on uncomplete
+    // 5. Delete completion and update habitanimal in a transaction
+    const [, updatedHabitanimal] = await prisma.$transaction([
+      // Delete the completion record
+      prisma.activityCompletion.delete({
+        where: { id: todayCompletion.id },
+      }),
+      // Update the habitanimal
+      prisma.habitanimal.update({
+        where: { id: habitanimal.id },
+        data: {
+          xp: newXP,
+          level: newLevel,
+          evolutionStage: newEvolutionStage,
+        },
+      }),
+    ])
+
+    return {
+      habitanimal: {
+        id: updatedHabitanimal.id,
+        previousLevel,
+        newLevel,
+        previousXP,
+        newXP,
+        leveledUp: false,
+        evolved: false,
+        previousEvolutionStage,
+        newEvolutionStage,
+        previousHealth,
+        newHealth,
       },
-    }),
-  ])
+    }
+  } else {
+    // No habitanimal - just delete the completion
+    await prisma.activityCompletion.delete({
+      where: { id: todayCompletion.id },
+    })
 
-  // 6. Return state changes
-  return {
-    habitanimal: {
-      id: updatedHabitanimal.id,
-      previousLevel,
-      newLevel,
-      previousXP,
-      newXP,
-      leveledUp: newLevel > previousLevel, // Will be false for uncomplete
-      evolved: newEvolutionStage > previousEvolutionStage, // Will be false for uncomplete
-      previousEvolutionStage,
-      newEvolutionStage,
-      previousHealth,
-      newHealth,
-    },
+    return {
+      habitanimal: {
+        id: '',
+        previousLevel: 0,
+        newLevel: 0,
+        previousXP: 0,
+        newXP: 0,
+        leveledUp: false,
+        evolved: false,
+        previousEvolutionStage: 0,
+        newEvolutionStage: 0,
+        previousHealth: 0,
+        newHealth: 0,
+      },
+    }
   }
 }
 
+// Legacy alias
+export const uncompleteHabit = uncompleteActivity
+
 /**
- * Get completion history for a habit
+ * Get completion history for an activity
  *
- * @param habitId - The ID of the habit
+ * @param activityId - The ID of the activity
  * @param userId - The ID of the user
  * @param limit - Maximum number of completions to return (default: 20)
  * @param offset - Number of completions to skip (default: 0)
  * @returns Array of completions with total count
  */
 export async function getCompletionHistory(
-  habitId: string,
+  activityId: string,
   userId: string,
   limit: number = 20,
   offset: number = 0
-): Promise<{ completions: HabitCompletion[]; totalCount: number }> {
-  // Verify habit exists and belongs to user
-  await verifyHabitOwnership(habitId, userId)
+): Promise<{ completions: ActivityCompletion[]; totalCount: number }> {
+  // Verify activity exists and belongs to user
+  await verifyActivityOwnership(activityId, userId)
 
   // Get completions with pagination
   const [completions, totalCount] = await prisma.$transaction([
-    prisma.habitCompletion.findMany({
-      where: { habitId },
+    prisma.activityCompletion.findMany({
+      where: { activityId },
       orderBy: { completedAt: 'desc' },
       take: limit,
       skip: offset,
     }),
-    prisma.habitCompletion.count({
-      where: { habitId },
+    prisma.activityCompletion.count({
+      where: { activityId },
     }),
   ])
 
@@ -357,9 +432,9 @@ export async function getCompletionHistory(
 // ============ ACTIVITY LOGGING ============
 
 /**
- * Default habit names for auto-created habits by category
+ * Default activity names for auto-created activities by category
  */
-const CATEGORY_HABIT_NAMES: Record<string, string> = {
+const CATEGORY_ACTIVITY_NAMES: Record<string, string> = {
   TRAINING: 'Workout',
   SLEEP: 'Sleep',
   NUTRITION: 'Healthy Eating',
@@ -370,25 +445,20 @@ const CATEGORY_HABIT_NAMES: Record<string, string> = {
 }
 
 /**
- * Map subcategory to legacy Category enum for backward compatibility
+ * Map subcategory to pillar
  */
-function mapSubCategoryToCategory(subCategory: SubCategory): Category {
-  switch (subCategory) {
-    case 'TRAINING':
-      return Category.FITNESS
-    case 'SLEEP':
-      return Category.SLEEP
-    case 'NUTRITION':
-      return Category.NUTRITION
-    case 'MEDITATION':
-      return Category.MINDFULNESS
-    case 'READING':
-    case 'LEARNING':
-    case 'JOURNALING':
-      return Category.LEARNING
-    default:
-      return Category.FITNESS
+function mapSubCategoryToPillar(subCategory: string): Pillar {
+  const bodyCategories = ['TRAINING', 'SLEEP', 'NUTRITION', 'FITNESS']
+  const mindCategories = ['MEDITATION', 'READING', 'LEARNING', 'JOURNALING', 'MINDFULNESS']
+
+  if (bodyCategories.includes(subCategory.toUpperCase())) {
+    return 'BODY'
   }
+  if (mindCategories.includes(subCategory.toUpperCase())) {
+    return 'MIND'
+  }
+  // Default to BODY for unknown categories
+  return 'BODY'
 }
 
 /**
@@ -410,7 +480,7 @@ function mapSource(source?: 'manual' | 'whoop' | 'api'): Source {
  * Log an activity for a user
  *
  * This function handles the complete activity logging flow:
- * 1. Find existing habit for pillar+category, or create one
+ * 1. Find existing activity for pillar+category, or create one
  * 2. Create completion with details (duration, notes, source)
  * 3. Update habitanimal XP and stats
  * 4. Update streak after logging
@@ -418,7 +488,7 @@ function mapSource(source?: 'manual' | 'whoop' | 'api'): Source {
  *
  * @param userId - The ID of the user
  * @param input - Activity input data
- * @returns LogActivityResult with habit ID, completion ID, and whether habit was newly created
+ * @returns LogActivityResult with activity ID, completion ID, and whether activity was newly created
  */
 export async function logActivity(
   userId: string,
@@ -426,38 +496,30 @@ export async function logActivity(
 ): Promise<LogActivityResult> {
   const { pillar, category, duration, details, source } = input
 
-  // Validate category is a valid SubCategory
-  const validSubCategories = Object.values(SubCategory) as string[]
-  if (!validSubCategories.includes(category)) {
-    throw new Error(`Invalid category: ${category}`)
-  }
-
-  const subCategory = category as SubCategory
-
-  // 1. Find existing habit for this pillar+category or create one
-  let habit = await prisma.habit.findFirst({
+  // 1. Find existing activity for this pillar+category or create one
+  let activity = await prisma.activity.findFirst({
     where: {
       userId,
       pillar: pillar as Pillar,
-      subCategory,
+      subCategory: category.toUpperCase(),
       archived: false,
     },
   })
 
   let isNew = false
 
-  if (!habit) {
-    // Create a new habit for this category
-    const habitName = CATEGORY_HABIT_NAMES[category] || category
-    const legacyCategory = mapSubCategoryToCategory(subCategory)
+  if (!activity) {
+    // Create a new activity for this category
+    const activityName = CATEGORY_ACTIVITY_NAMES[category.toUpperCase()] || category
 
-    habit = await prisma.habit.create({
+    activity = await prisma.activity.create({
       data: {
-        name: habitName,
-        category: legacyCategory,
+        name: activityName,
         pillar: pillar as Pillar,
-        subCategory,
+        subCategory: category.toUpperCase(),
         frequency: Frequency.DAILY,
+        points: 25,
+        isHabit: true,
         userId,
       },
     })
@@ -466,9 +528,9 @@ export async function logActivity(
 
   // 2. Check if already completed today
   const { start, end } = getTodayBounds()
-  const existingCompletion = await prisma.habitCompletion.findFirst({
+  const existingCompletion = await prisma.activityCompletion.findFirst({
     where: {
-      habitId: habit.id,
+      activityId: activity.id,
       completedAt: {
         gte: start,
         lte: end,
@@ -479,7 +541,7 @@ export async function logActivity(
   if (existingCompletion) {
     // Already completed today - return existing completion
     return {
-      habitId: habit.id,
+      activityId: activity.id,
       completionId: existingCompletion.id,
       isNew: false,
     }
@@ -494,26 +556,20 @@ export async function logActivity(
       : durationNote
   }
 
-  // 4. Calculate XP
+  // 4. Calculate points
   const hasDetails = Boolean(completionDetails && completionDetails.trim().length > 0)
-  const xpEarned = calculateHabitXP(hasDetails)
+  const pointsEarned = hasDetails ? activity.points + 5 : activity.points
 
-  // 5. Get habitanimal for this category (using legacy category mapping)
-  const habitanimalType = habit.category as unknown as Habitanimal['type']
-  const habitanimal = await prisma.habitanimal.findFirst({
-    where: {
-      userId,
-      type: habitanimalType,
-    },
-  })
+  // 5. Get habitanimal for this pillar
+  const habitanimal = await getHabitanimalForPillar(userId, pillar)
 
   // 6. Create completion and update habitanimal in a transaction
   const mappedSource = mapSource(source)
 
-  let completion: HabitCompletion
+  let completion: ActivityCompletion
 
   if (habitanimal) {
-    // Calculate new state values for habitanimal
+    const xpEarned = calculateHabitXP(hasDetails)
     const previousXP = habitanimal.xp
     const newXP = previousXP + xpEarned
     const newLevel = calculateLevel(newXP)
@@ -522,11 +578,11 @@ export async function logActivity(
     const newHealth = recoverHealth(previousHealth)
 
     const [createdCompletion] = await prisma.$transaction([
-      prisma.habitCompletion.create({
+      prisma.activityCompletion.create({
         data: {
-          habitId: habit.id,
+          activityId: activity.id,
           details: completionDetails || null,
-          xpEarned,
+          pointsEarned,
           source: mappedSource,
         },
       }),
@@ -544,11 +600,11 @@ export async function logActivity(
     completion = createdCompletion
   } else {
     // No habitanimal - just create the completion
-    completion = await prisma.habitCompletion.create({
+    completion = await prisma.activityCompletion.create({
       data: {
-        habitId: habit.id,
+        activityId: activity.id,
         details: completionDetails || null,
-        xpEarned,
+        pointsEarned,
         source: mappedSource,
       },
     })
@@ -556,7 +612,7 @@ export async function logActivity(
 
   // 7. Update daily goal (async, non-blocking)
   try {
-    await updateDailyGoal(userId, pillar, habit.id)
+    await updateDailyGoal(userId, pillar, activity.id)
   } catch (error) {
     console.error('Failed to update daily goal:', error)
     // Non-critical, continue
@@ -571,7 +627,7 @@ export async function logActivity(
   }
 
   return {
-    habitId: habit.id,
+    activityId: activity.id,
     completionId: completion.id,
     isNew,
   }
