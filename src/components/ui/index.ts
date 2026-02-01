@@ -3,6 +3,7 @@ export { Card, CardHeader, CardTitle, CardContent } from './Card'
 export { ProgressBar, HealthBar } from './ProgressBar'
 export { AnimatedNumber, AnimatedPercentage, AnimatedXP } from './AnimatedNumber'
 export { Confetti, ConfettiBurst } from './Confetti'
+export { ConfirmDialog } from './ConfirmDialog'
 
 // New premium components
 export { GlassCard, GlassCardStatic } from './GlassCard'

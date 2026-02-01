@@ -10,11 +10,39 @@ import {
   SleepDashboard,
   NutritionDashboard,
   CustomDashboard,
+  AllActivitiesDashboard,
+  AddSubCategoryModal,
+  EditSubCategoryModal,
 } from '@/components/subcategories';
-import { QuickLogChips } from '@/components/activities';
+import type { CustomSubcategory } from '@/components/subcategories';
+import { QuickLogChips, ActivityDetailModal } from '@/components/activities';
 import { ActivityLogModal } from '@/components/activities/ActivityLogModal';
-import { PREDEFINED_SUBCATEGORIES, getSubcategoryConfig } from '@/lib/subcategories';
+import { PREDEFINED_SUBCATEGORIES, getSubcategoryConfig, getSubcategoriesForPillar } from '@/lib/subcategories';
 import { POINTS_THRESHOLD } from '@/lib/points';
+import { useAuth } from '@/hooks/useAuth';
+import { DateNavigation } from '@/components/navigation';
+
+/**
+ * Check if a date is today
+ */
+function isDateToday(date: Date): boolean {
+  const today = new Date();
+  return (
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  );
+}
+
+/**
+ * Format date as YYYY-MM-DD
+ */
+function formatDateParam(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 // ============ CONSTANTS ============
 
@@ -107,10 +135,12 @@ function BodyPageSkeleton() {
 
 export default function BodyPage() {
   const router = useRouter();
+  const { token } = useAuth();
 
   // State
-  const [selectedCategory, setSelectedCategory] = useState('TRAINING');
-  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [customSubcategories, setCustomSubcategories] = useState<CustomSubcategory[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [dailyStatus, setDailyStatus] = useState<DailyStatusData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -120,6 +150,13 @@ export default function BodyPage() {
     type: 'success' | 'error';
     message: string;
   } | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showAddSubcategoryModal, setShowAddSubcategoryModal] = useState(false);
+
+  // Derived state
+  const isToday = isDateToday(selectedDate);
+  const [editingSubcategory, setEditingSubcategory] = useState<CustomSubcategory | null>(null);
 
   // Calculate points from daily status activities
   const bodyPoints = dailyStatus?.body.score ?? 0;
@@ -135,34 +172,40 @@ export default function BodyPage() {
 
   // Fetch data
   const fetchData = useCallback(async () => {
+    if (!token) return;
+
+    setIsLoading(true);
+
     try {
-      const [activitiesRes, statusRes] = await Promise.all([
-        fetch('/api/v1/activities?pillar=BODY'),
-        fetch('/api/v1/daily-status'),
+      const headers = { Authorization: `Bearer ${token}` };
+      const dateParam = isDateToday(selectedDate) ? '' : `?date=${formatDateParam(selectedDate)}`;
+
+      const [activitiesRes, statusRes, subcategoriesRes] = await Promise.all([
+        fetch('/api/v1/activities?pillar=BODY', { headers }),
+        fetch(`/api/v1/daily-status${dateParam}`, { headers }),
+        fetch('/api/v1/subcategories?pillar=BODY', { headers }),
       ]);
 
       if (activitiesRes.ok) {
         const data = await activitiesRes.json();
         setActivities(data.data);
-        // Extract custom categories
-        const allSubCategories = data.data.map((a: Activity) => a.subCategory) as string[];
-        const customSubCategories = allSubCategories.filter(
-          (sc: string) => !PREDEFINED_SUBCATEGORIES.BODY.includes(sc as typeof PREDEFINED_SUBCATEGORIES.BODY[number])
-        );
-        const custom = Array.from(new Set(customSubCategories));
-        setCustomCategories(custom);
       }
 
       if (statusRes.ok) {
         const data = await statusRes.json();
         setDailyStatus(data.data);
       }
+
+      if (subcategoriesRes.ok) {
+        const data = await subcategoriesRes.json();
+        setCustomSubcategories(data.data.subcategories || []);
+      }
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [token, selectedDate]);
 
   useEffect(() => {
     fetchData();
@@ -185,7 +228,10 @@ export default function BodyPage() {
     try {
       const res = await fetch(`/api/v1/activities/${activityId}/complete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({}),
       });
       if (res.ok) {
@@ -203,16 +249,137 @@ export default function BodyPage() {
 
   // Handle add custom category
   const handleAddCustomCategory = () => {
-    // For now, show an alert - this would open a modal in full implementation
-    // The AddSubCategoryModal component needs to be created
-    setNotification({
-      type: 'error',
-      message: 'Custom categories coming soon!',
-    });
+    setShowAddSubcategoryModal(true);
+  };
+
+  // Handle subcategory created
+  const handleSubcategoryCreated = (subcategory: CustomSubcategory) => {
+    setCustomSubcategories((prev) => [...prev, subcategory]);
+    setNotification({ type: 'success', message: `${subcategory.name} category created!` });
+  };
+
+  // Handle edit custom subcategory
+  const handleEditCustomSubcategory = (subcategory: CustomSubcategory) => {
+    setEditingSubcategory(subcategory);
+  };
+
+  // Handle subcategory updated
+  const handleSubcategoryUpdated = (updated: CustomSubcategory) => {
+    setCustomSubcategories((prev) =>
+      prev.map((s) => (s.id === updated.id ? updated : s))
+    );
+    setNotification({ type: 'success', message: `${updated.name} updated!` });
+  };
+
+  // Handle subcategory deleted
+  const handleSubcategoryDeleted = () => {
+    if (editingSubcategory) {
+      setCustomSubcategories((prev) =>
+        prev.filter((s) => s.id !== editingSubcategory.id)
+      );
+      // If we were viewing the deleted category, switch to ALL
+      if (selectedCategory === editingSubcategory.key) {
+        setSelectedCategory('ALL');
+      }
+      setNotification({ type: 'success', message: 'Category deleted!' });
+      fetchData(); // Refresh to update activities
+    }
+  };
+
+  // Get all available subcategories for reassignment dropdown
+  const getAllSubcategories = () => {
+    const predefined = getSubcategoriesForPillar('BODY').map((key) => ({
+      key,
+      name: getSubcategoryConfig(key)?.label || key,
+    }));
+    const custom = customSubcategories.map((s) => ({
+      key: s.key,
+      name: s.name,
+    }));
+    return [...predefined, ...custom];
+  };
+
+  // Handle activity selection (for edit/delete)
+  const handleActivitySelect = (activity: Activity) => {
+    setSelectedActivity(activity);
+    setShowDetailModal(true);
+  };
+
+  // Handle activity update
+  const handleActivityUpdate = async (id: string, data: Partial<Activity>) => {
+    try {
+      const res = await fetch(`/api/v1/activities/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (res.ok) {
+        setNotification({ type: 'success', message: 'Activity updated!' });
+        fetchData();
+        // Update the selected activity with new data
+        setSelectedActivity((prev) => (prev ? { ...prev, ...data } : null));
+      } else {
+        const error = await res.json();
+        setNotification({
+          type: 'error',
+          message: error.message || 'Failed to update activity',
+        });
+      }
+    } catch (error) {
+      console.error('Update error:', error);
+      setNotification({ type: 'error', message: 'Failed to update activity' });
+    }
+  };
+
+  // Handle activity delete
+  const handleActivityDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/activities/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        setNotification({ type: 'success', message: 'Activity deleted!' });
+        setShowDetailModal(false);
+        setSelectedActivity(null);
+        fetchData();
+      } else {
+        const error = await res.json();
+        setNotification({
+          type: 'error',
+          message: error.message || 'Failed to delete activity',
+        });
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      setNotification({ type: 'error', message: 'Failed to delete activity' });
+    }
   };
 
   // Render dashboard based on selected category
   const renderDashboard = () => {
+    // All activities view
+    if (selectedCategory === 'ALL') {
+      return (
+        <AllActivitiesDashboard
+          activities={activities}
+          completedActivities={dailyStatus?.body.activities ?? []}
+          totalPoints={bodyPoints}
+          pillar="BODY"
+          onQuickLog={handleQuickLog}
+          onActivitySelect={(activity) => handleActivitySelect(activity as Activity)}
+          isLogging={loggingActivityId}
+        />
+      );
+    }
+
     const categoryActivities =
       dailyStatus?.body.activities
         .filter((c) => c.category.toUpperCase() === selectedCategory.toUpperCase())
@@ -279,7 +446,7 @@ export default function BodyPage() {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="space-y-6 pb-8 max-w-2xl mx-auto"
+      className="space-y-6 pb-8 max-w-4xl mx-auto"
     >
       {/* Notification Toast */}
       <AnimatePresence>
@@ -347,14 +514,30 @@ export default function BodyPage() {
             <p className="text-text-muted text-sm">Physical wellness tracking</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowActivityModal(true)}
-          className="px-4 py-2 rounded-lg font-medium text-background transition-colors hover:opacity-90"
-          style={{ backgroundColor: BODY_COLOR }}
-        >
-          Log Activity
-        </button>
+        {isToday && (
+          <button
+            onClick={() => setShowActivityModal(true)}
+            className="px-4 py-2 rounded-lg font-medium text-background transition-colors hover:opacity-90"
+            style={{ backgroundColor: BODY_COLOR }}
+          >
+            Log Activity
+          </button>
+        )}
       </motion.header>
+
+      {/* Date Navigation */}
+      <motion.section
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+      >
+        <DateNavigation
+          currentDate={selectedDate}
+          onDateChange={setSelectedDate}
+          isToday={isToday}
+          pillarColor={BODY_COLOR}
+        />
+      </motion.section>
 
       {/* Score Ring and Streak */}
       <motion.section
@@ -364,7 +547,7 @@ export default function BodyPage() {
         className="flex flex-col items-center py-4"
       >
         <div className="relative">
-          <ScoreRing score={bodyPoints} pillar="body" size={200} strokeWidth={12} showLabel={false} />
+          <ScoreRing score={bodyPoints} pillar="body" size={200} strokeWidth={12} showLabel={false} showScore={false} />
           {/* Points display in center */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <span className="text-4xl font-bold" style={{ color: BODY_COLOR }}>
@@ -408,14 +591,15 @@ export default function BodyPage() {
         <SubCategoryTabs
           pillar="BODY"
           selectedCategory={selectedCategory}
-          customCategories={customCategories}
+          customCategories={customSubcategories}
           onSelect={setSelectedCategory}
           onAddCustom={handleAddCustomCategory}
+          onEditCustom={handleEditCustomSubcategory}
         />
       </motion.section>
 
-      {/* Quick Log Chips */}
-      {quickLogHabits.length > 0 && (
+      {/* Quick Log Chips (only for today) */}
+      {isToday && quickLogHabits.length > 0 && (
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -428,6 +612,22 @@ export default function BodyPage() {
             pillarColor={categoryColor}
           />
         </motion.section>
+      )}
+
+      {/* Historical data indicator */}
+      {!isToday && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center py-2 px-4 rounded-lg bg-surface-light text-text-muted text-sm"
+        >
+          Viewing historical data for {selectedDate.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })}
+        </motion.div>
       )}
 
       {/* Dashboard Content */}
@@ -460,6 +660,37 @@ export default function BodyPage() {
           setNotification({ type: 'success', message: 'Activity logged!' });
         }}
         pillar="BODY"
+      />
+
+      {/* Activity Detail Modal (Edit/Delete) */}
+      <ActivityDetailModal
+        activity={selectedActivity}
+        isOpen={showDetailModal}
+        onClose={() => {
+          setShowDetailModal(false);
+          setSelectedActivity(null);
+        }}
+        onUpdate={handleActivityUpdate}
+        onDelete={handleActivityDelete}
+      />
+
+      {/* Add Subcategory Modal */}
+      <AddSubCategoryModal
+        isOpen={showAddSubcategoryModal}
+        onClose={() => setShowAddSubcategoryModal(false)}
+        onSuccess={handleSubcategoryCreated}
+        pillar="BODY"
+      />
+
+      {/* Edit Subcategory Modal */}
+      <EditSubCategoryModal
+        isOpen={!!editingSubcategory}
+        onClose={() => setEditingSubcategory(null)}
+        onSuccess={handleSubcategoryUpdated}
+        onDelete={handleSubcategoryDeleted}
+        subcategory={editingSubcategory}
+        pillar="BODY"
+        availableSubcategories={getAllSubcategories()}
       />
     </motion.div>
   );

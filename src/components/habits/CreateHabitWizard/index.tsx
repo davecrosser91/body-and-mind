@@ -172,11 +172,20 @@ export function CreateHabitWizard({ isOpen, onClose, onCreated }: CreateHabitWiz
           name: formData.name.trim(),
           pillar: formData.pillar,
           subCategory: formData.subCategory,
-          frequency: formData.frequency.toLowerCase(),
+          frequency: formData.frequency,
           description: formData.description.trim() || null,
           points: formData.points,
+          isHabit: true,
           cueType: formData.cueType,
           cueValue: formData.cueValue.trim() || null,
+          ...(formData.autoTrigger && {
+            autoTrigger: {
+              triggerType: formData.autoTrigger.triggerType,
+              thresholdValue: formData.autoTrigger.thresholdValue,
+              workoutTypeId: formData.autoTrigger.workoutTypeId,
+              triggerActivityId: formData.autoTrigger.triggerActivityId,
+            },
+          }),
         }),
       });
 

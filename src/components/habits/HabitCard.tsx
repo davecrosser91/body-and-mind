@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Pillar } from '@prisma/client';
 import type { SubCategory } from './CreateHabitWizard/types';
 
@@ -14,6 +14,8 @@ interface HabitCardProps {
   isLoading?: boolean;
   onComplete: (habitId: string, details?: string) => Promise<void>;
   onUncomplete: (habitId: string) => Promise<void>;
+  onEdit?: (habitId: string) => void;
+  onDelete?: (habitId: string) => void;
 }
 
 const pillarStyles = {
@@ -62,10 +64,27 @@ export function HabitCard({
   isLoading = false,
   onComplete,
   onUncomplete,
+  onEdit,
+  onDelete,
 }: HabitCardProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [details, setDetails] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const styles = pillarStyles[pillar];
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!showMenu) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMenu]);
 
   const handleToggle = async () => {
     if (isLoading) return;
@@ -177,6 +196,65 @@ export function HabitCard({
                 d={showDetails ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
             </svg>
           </button>
+        )}
+
+        {/* More options menu */}
+        {(onEdit || onDelete) && (
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setShowMenu(!showMenu)}
+              className="p-2 text-text-muted hover:text-text-secondary transition-colors"
+              aria-label="More options"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+              </svg>
+            </button>
+
+            <AnimatePresence>
+              {showMenu && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  transition={{ duration: 0.1 }}
+                  className="absolute right-0 top-full mt-1 z-20 bg-surface border border-surface-lighter rounded-lg shadow-lg overflow-hidden min-w-[120px]"
+                >
+                  {onEdit && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onEdit(id);
+                      }}
+                      className="w-full px-4 py-2.5 text-left text-sm text-text-primary hover:bg-surface-light flex items-center gap-2 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        onDelete(id);
+                      }}
+                      className="w-full px-4 py-2.5 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
       </div>
 

@@ -48,6 +48,8 @@ export async function POST(request: NextRequest) {
       sleepSynced: result.sleepSynced,
       workoutsSynced: result.workoutsSynced,
       xpEarned: result.xpEarned,
+      autoTriggersEvaluated: result.autoTriggersEvaluated,
+      autoTriggersActivated: result.autoTriggersActivated,
       errors: result.errors.length > 0 ? result.errors : undefined,
     })
   } catch (error) {

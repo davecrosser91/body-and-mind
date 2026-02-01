@@ -1,8 +1,50 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { CueType, Pillar } from '@prisma/client';
-import { CreateHabitFormData, CUE_TYPE_CONFIG, BODY_COLOR, MIND_COLOR } from './types';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CueType, Pillar, AutoTriggerType } from '@prisma/client';
+import { CreateHabitFormData, CUE_TYPE_CONFIG, BODY_COLOR, MIND_COLOR, AutoTriggerConfig } from './types';
+import { useAuth } from '@/hooks/useAuth';
+
+// Whoop workout types
+const WHOOP_WORKOUT_TYPES = [
+  { id: 1, name: 'Running' },
+  { id: 44, name: 'Functional Fitness' },
+  { id: 43, name: 'HIIT' },
+  { id: 0, name: 'Weightlifting' },
+  { id: 63, name: 'Meditation' },
+  { id: 52, name: 'Cycling' },
+  { id: 71, name: 'Yoga' },
+  { id: 48, name: 'Swimming' },
+  { id: 82, name: 'Walking' },
+] as const;
+
+// Auto-trigger type configuration
+interface TriggerTypeConfig {
+  type: AutoTriggerType;
+  label: string;
+  description: string;
+  needsThreshold?: boolean;
+  needsWorkoutType?: boolean;
+  needsActivity?: boolean;
+  unit?: string;
+  defaultValue?: number;
+}
+
+const AUTO_TRIGGER_TYPES: TriggerTypeConfig[] = [
+  { type: 'WHOOP_RECOVERY_ABOVE', label: 'Recovery above', description: 'When Whoop recovery % is at or above threshold', needsThreshold: true, unit: '%', defaultValue: 60 },
+  { type: 'WHOOP_RECOVERY_BELOW', label: 'Recovery below', description: 'When Whoop recovery % is below threshold', needsThreshold: true, unit: '%', defaultValue: 50 },
+  { type: 'WHOOP_SLEEP_ABOVE', label: 'Sleep more than', description: 'When Whoop sleep hours are at or above threshold', needsThreshold: true, unit: 'hours', defaultValue: 7 },
+  { type: 'WHOOP_STRAIN_ABOVE', label: 'Strain above', description: 'When Whoop strain is at or above threshold', needsThreshold: true, unit: 'strain', defaultValue: 10 },
+  { type: 'WHOOP_WORKOUT_TYPE', label: 'Workout logged', description: 'When a specific workout type is logged in Whoop', needsWorkoutType: true },
+  { type: 'ACTIVITY_COMPLETED', label: 'Activity completed', description: 'When another activity is completed', needsActivity: true },
+];
+
+interface Activity {
+  id: string;
+  name: string;
+  pillar: string;
+}
 
 interface StepCueTriggerProps {
   formData: CreateHabitFormData;
@@ -12,6 +54,25 @@ interface StepCueTriggerProps {
 
 export function StepCueTrigger({ formData, onChange, pillar }: StepCueTriggerProps) {
   const color = pillar === 'BODY' ? BODY_COLOR : MIND_COLOR;
+  const { token } = useAuth();
+  const [showAutoTrigger, setShowAutoTrigger] = useState(!!formData.autoTrigger);
+  const [activities, setActivities] = useState<Activity[]>([]);
+
+  // Fetch activities for ACTIVITY_COMPLETED trigger
+  useEffect(() => {
+    if (showAutoTrigger && token) {
+      fetch('/api/v1/activities', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setActivities(data);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [showAutoTrigger, token]);
 
   const handleCueTypeChange = (type: CueType | null) => {
     onChange('cueType', type);
@@ -19,6 +80,32 @@ export function StepCueTrigger({ formData, onChange, pillar }: StepCueTriggerPro
       onChange('cueValue', '');
     }
   };
+
+  const handleAutoTriggerToggle = () => {
+    if (showAutoTrigger) {
+      setShowAutoTrigger(false);
+      onChange('autoTrigger', null);
+    } else {
+      setShowAutoTrigger(true);
+    }
+  };
+
+  const handleAutoTriggerTypeChange = (type: AutoTriggerType) => {
+    const config = AUTO_TRIGGER_TYPES.find((c) => c.type === type);
+    if (!config) return;
+
+    const newTrigger: AutoTriggerConfig = {
+      triggerType: type,
+      thresholdValue: config.needsThreshold ? config.defaultValue : undefined,
+      workoutTypeId: config.needsWorkoutType ? WHOOP_WORKOUT_TYPES[0].id : undefined,
+      triggerActivityId: undefined,
+    };
+    onChange('autoTrigger', newTrigger);
+  };
+
+  const currentAutoTriggerConfig = formData.autoTrigger
+    ? AUTO_TRIGGER_TYPES.find((c) => c.type === formData.autoTrigger?.triggerType)
+    : null;
 
   return (
     <div className="space-y-5">
@@ -132,6 +219,162 @@ export function StepCueTrigger({ formData, onChange, pillar }: StepCueTriggerPro
             </motion.div>
           );
         })}
+      </div>
+
+      {/* Auto-Trigger Section */}
+      <div className="pt-4 border-t border-surface-lighter">
+        <button
+          type="button"
+          onClick={handleAutoTriggerToggle}
+          className="w-full flex items-center justify-between px-4 py-3 bg-surface-light border border-surface-lighter rounded-xl text-left transition-colors hover:bg-surface-lighter"
+        >
+          <div className="flex items-center gap-3">
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke={showAutoTrigger ? color : 'currentColor'}
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <div>
+              <span className={`text-sm font-medium ${showAutoTrigger ? '' : 'text-text-secondary'}`}>
+                Auto-Complete Trigger
+              </span>
+              <p className="text-xs text-text-muted">Auto-complete based on Whoop data or activity</p>
+            </div>
+          </div>
+          <motion.svg
+            className="w-5 h-5 text-text-muted"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            animate={{ rotate: showAutoTrigger ? 180 : 0 }}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </motion.svg>
+        </button>
+
+        <AnimatePresence>
+          {showAutoTrigger && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="pt-4 space-y-4">
+                {/* Trigger Type Select */}
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">
+                    Auto-complete when
+                  </label>
+                  <select
+                    value={formData.autoTrigger?.triggerType || ''}
+                    onChange={(e) => handleAutoTriggerTypeChange(e.target.value as AutoTriggerType)}
+                    className="w-full px-4 py-3 bg-surface-light border border-surface-lighter rounded-xl
+                      text-text-primary focus:outline-none focus:ring-2 focus:border-transparent"
+                    style={{ '--tw-ring-color': color } as React.CSSProperties}
+                  >
+                    <option value="">Select a trigger...</option>
+                    <optgroup label="Whoop Data">
+                      {AUTO_TRIGGER_TYPES.filter(t => t.type.startsWith('WHOOP')).map((config) => (
+                        <option key={config.type} value={config.type}>
+                          {config.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Activity">
+                      {AUTO_TRIGGER_TYPES.filter(t => t.type === 'ACTIVITY_COMPLETED').map((config) => (
+                        <option key={config.type} value={config.type}>
+                          {config.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                {/* Threshold Input */}
+                {currentAutoTriggerConfig?.needsThreshold && formData.autoTrigger && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">
+                      Threshold ({currentAutoTriggerConfig.unit})
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        value={formData.autoTrigger.thresholdValue ?? ''}
+                        onChange={(e) => onChange('autoTrigger', {
+                          ...formData.autoTrigger!,
+                          thresholdValue: parseFloat(e.target.value) || 0,
+                        })}
+                        min={0}
+                        max={currentAutoTriggerConfig.unit === '%' ? 100 : currentAutoTriggerConfig.unit === 'strain' ? 21 : 24}
+                        step={currentAutoTriggerConfig.unit === 'hours' ? 0.5 : 1}
+                        className="flex-1 px-4 py-3 bg-surface-light border border-surface-lighter rounded-xl
+                          text-text-primary focus:outline-none focus:ring-2 focus:border-transparent"
+                        style={{ '--tw-ring-color': color } as React.CSSProperties}
+                      />
+                      <span className="text-text-muted text-sm">{currentAutoTriggerConfig.unit}</span>
+                    </div>
+                    <p className="text-xs text-text-muted mt-1">{currentAutoTriggerConfig.description}</p>
+                  </motion.div>
+                )}
+
+                {/* Workout Type Select */}
+                {currentAutoTriggerConfig?.needsWorkoutType && formData.autoTrigger && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">
+                      Workout Type
+                    </label>
+                    <select
+                      value={formData.autoTrigger.workoutTypeId ?? ''}
+                      onChange={(e) => onChange('autoTrigger', {
+                        ...formData.autoTrigger!,
+                        workoutTypeId: parseInt(e.target.value, 10),
+                      })}
+                      className="w-full px-4 py-3 bg-surface-light border border-surface-lighter rounded-xl
+                        text-text-primary focus:outline-none focus:ring-2 focus:border-transparent"
+                      style={{ '--tw-ring-color': color } as React.CSSProperties}
+                    >
+                      {WHOOP_WORKOUT_TYPES.map((workout) => (
+                        <option key={workout.id} value={workout.id}>{workout.name}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-text-muted mt-1">{currentAutoTriggerConfig.description}</p>
+                  </motion.div>
+                )}
+
+                {/* Activity Select */}
+                {currentAutoTriggerConfig?.needsActivity && formData.autoTrigger && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">
+                      Trigger Activity
+                    </label>
+                    <select
+                      value={formData.autoTrigger.triggerActivityId ?? ''}
+                      onChange={(e) => onChange('autoTrigger', {
+                        ...formData.autoTrigger!,
+                        triggerActivityId: e.target.value || undefined,
+                      })}
+                      className="w-full px-4 py-3 bg-surface-light border border-surface-lighter rounded-xl
+                        text-text-primary focus:outline-none focus:ring-2 focus:border-transparent"
+                      style={{ '--tw-ring-color': color } as React.CSSProperties}
+                    >
+                      <option value="">Select an activity...</option>
+                      {activities.map((activity) => (
+                        <option key={activity.id} value={activity.id}>
+                          {activity.name} ({activity.pillar})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-text-muted mt-1">{currentAutoTriggerConfig.description}</p>
+                  </motion.div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Atomic Habits Tip */}

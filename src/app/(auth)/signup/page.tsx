@@ -101,8 +101,8 @@ export default function SignupPage() {
         transition={{ duration: 0.3, delay: 0.1 }}
         className="text-center mb-8"
       >
-        <h1 className="text-2xl font-bold text-gray-900">Create your account</h1>
-        <p className="text-gray-600 mt-2">Start your habit journey today</p>
+        <h1 className="text-2xl font-bold text-text-primary">Create your account</h1>
+        <p className="text-text-muted mt-2">Start your habit journey today</p>
       </motion.div>
 
       {/* Error message */}
@@ -110,9 +110,9 @@ export default function SignupPage() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6 p-3 rounded-lg bg-red-50 border border-red-200"
+          className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/30"
         >
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-red-400">{error}</p>
         </motion.div>
       )}
 
@@ -217,12 +217,12 @@ export default function SignupPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, delay: 0.4 }}
-        className="text-center mt-6 text-sm text-gray-600"
+        className="text-center mt-6 text-sm text-text-muted"
       >
         Already have an account?{' '}
         <Link
           href="/login"
-          className="text-gray-900 font-medium hover:underline"
+          className="text-body font-medium hover:underline"
         >
           Log in
         </Link>

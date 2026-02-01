@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pillar, Frequency } from '@prisma/client';
+import { Pillar, Frequency, AutoTriggerType } from '@prisma/client';
 import { useAuth } from '@/hooks/useAuth';
+import { AutoTriggerSection, AutoTriggerConfig } from './AutoTriggerSection';
 
 // SubCategory is now a string type
 type SubCategory = 'TRAINING' | 'SLEEP' | 'NUTRITION' | 'MEDITATION' | 'READING' | 'LEARNING' | 'JOURNALING';
@@ -15,6 +16,7 @@ export interface CreateHabitFormData {
   subCategory: SubCategory;
   description?: string;
   frequency: Frequency;
+  autoTrigger?: AutoTriggerConfig | null;
 }
 
 interface CreateHabitModalNewProps {
@@ -73,6 +75,7 @@ export function CreateHabitModalNew({
     subCategory: 'TRAINING',
     description: '',
     frequency: 'DAILY',
+    autoTrigger: null,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +96,7 @@ export function CreateHabitModalNew({
         subCategory: 'TRAINING',
         description: '',
         frequency: 'DAILY',
+        autoTrigger: null,
       });
       setError(null);
     }
@@ -128,6 +132,14 @@ export function CreateHabitModalNew({
           subCategory: formData.subCategory,
           description: formData.description?.trim() || null,
           frequency: formData.frequency.toLowerCase(),
+          ...(formData.autoTrigger && {
+            autoTrigger: {
+              triggerType: formData.autoTrigger.triggerType,
+              thresholdValue: formData.autoTrigger.thresholdValue,
+              workoutTypeId: formData.autoTrigger.workoutTypeId,
+              triggerActivityId: formData.autoTrigger.triggerActivityId,
+            },
+          }),
         }),
       });
 
@@ -307,6 +319,13 @@ export function CreateHabitModalNew({
                     focus:outline-none focus:ring-2 focus:ring-body focus:border-transparent"
                 />
               </div>
+
+              {/* Auto-Trigger (optional) */}
+              <AutoTriggerSection
+                pillar={formData.pillar}
+                trigger={formData.autoTrigger}
+                onChange={(trigger) => setFormData(prev => ({ ...prev, autoTrigger: trigger }))}
+              />
 
               {/* Error */}
               {error && (

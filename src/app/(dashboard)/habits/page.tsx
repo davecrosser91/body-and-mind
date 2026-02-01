@@ -2,18 +2,31 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Pillar } from '@prisma/client';
+import { Pillar, Frequency } from '@prisma/client';
 import { HabitListNew, HabitNew } from '@/components/habits';
+import { EditHabitModal } from '@/components/habits/EditHabitModal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useAuth } from '@/hooks/useAuth';
 
 // SubCategory is now a string type
 type SubCategory = 'TRAINING' | 'SLEEP' | 'NUTRITION' | 'MEDITATION' | 'READING' | 'LEARNING' | 'JOURNALING';
 
+interface HabitDetails extends HabitNew {
+  description?: string | null;
+  points: number;
+  frequency: Frequency;
+}
+
 export default function HabitsPage() {
   const { token } = useAuth();
-  const [habits, setHabits] = useState<HabitNew[]>([]);
+  const [habits, setHabits] = useState<HabitDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Edit/Delete state
+  const [editingHabit, setEditingHabit] = useState<HabitDetails | null>(null);
+  const [deletingHabit, setDeletingHabit] = useState<HabitDetails | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchHabits = useCallback(async () => {
     if (!token) return;
@@ -31,18 +44,24 @@ export default function HabitsPage() {
 
       const data = await response.json();
       const items = data.data || [];
-      // Map API response to HabitNew format
-      const mappedHabits: HabitNew[] = items.map((h: {
+      // Map API response to HabitDetails format
+      const mappedHabits: HabitDetails[] = items.map((h: {
         id: string;
         name: string;
         pillar?: Pillar;
         subCategory?: string;
+        description?: string | null;
+        points?: number;
+        frequency?: Frequency;
         completedToday: boolean;
       }) => ({
         id: h.id,
         name: h.name,
         pillar: h.pillar || 'BODY',
-        subCategory: h.subCategory || 'TRAINING',
+        subCategory: (h.subCategory || 'TRAINING') as SubCategory,
+        description: h.description,
+        points: h.points || 25,
+        frequency: h.frequency || 'DAILY',
         completedToday: h.completedToday,
       }));
       setHabits(mappedHabits);
@@ -102,7 +121,59 @@ export default function HabitsPage() {
   };
 
   const handleHabitCreated = (habit: HabitNew) => {
-    setHabits(prev => [...prev, habit]);
+    setHabits(prev => [...prev, { ...habit, points: 25, frequency: 'DAILY' as Frequency }]);
+  };
+
+  const handleEdit = (habitId: string) => {
+    const habit = habits.find(h => h.id === habitId);
+    if (habit) {
+      setEditingHabit(habit);
+    }
+  };
+
+  const handleEditComplete = (updatedHabit: {
+    id: string;
+    name: string;
+    pillar: Pillar;
+    subCategory: SubCategory;
+    description?: string | null;
+    points: number;
+    frequency: Frequency;
+  }) => {
+    setHabits(prev => prev.map(h =>
+      h.id === updatedHabit.id ? { ...h, ...updatedHabit } : h
+    ));
+    setEditingHabit(null);
+  };
+
+  const handleDeleteClick = (habitId: string) => {
+    const habit = habits.find(h => h.id === habitId);
+    if (habit) {
+      setDeletingHabit(habit);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!token || !deletingHabit) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/v1/activities/${deletingHabit.id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok || response.status === 204) {
+        setHabits(prev => prev.filter(h => h.id !== deletingHabit.id));
+        setDeletingHabit(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete habit:', err);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (loading) {
@@ -158,6 +229,8 @@ export default function HabitsPage() {
         onComplete={handleComplete}
         onUncomplete={handleUncomplete}
         onHabitCreated={handleHabitCreated}
+        onEdit={handleEdit}
+        onDelete={handleDeleteClick}
         showAddButton={true}
       />
 
@@ -187,6 +260,27 @@ export default function HabitsPage() {
           </p>
         </div>
       </motion.div>
+
+      {/* Edit Modal */}
+      <EditHabitModal
+        isOpen={!!editingHabit}
+        onClose={() => setEditingHabit(null)}
+        habit={editingHabit}
+        onUpdated={handleEditComplete}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!deletingHabit}
+        onClose={() => setDeletingHabit(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Habit?"
+        message={`Are you sure you want to delete "${deletingHabit?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={isDeleting}
+      />
     </motion.div>
   );
 }

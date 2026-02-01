@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
     console.log('Whoop callback: Exchanging code for tokens...')
     const tokens = await exchangeCodeForTokens(code)
     console.log('Whoop callback: Token exchange successful')
+    console.log('Whoop callback: Granted scopes:', tokens.scope)
 
     // Calculate expiration date
     const expiresAt = calculateExpiresAt(tokens.expires_in)

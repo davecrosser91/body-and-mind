@@ -14,7 +14,7 @@ import {
   internalError,
 } from '@/lib/api-response'
 import { prisma } from '@/lib/db'
-import { Pillar, Frequency, CueType } from '@prisma/client'
+import { Pillar, Frequency, CueType, AutoTriggerType } from '@prisma/client'
 
 /**
  * GET /api/v1/activities
@@ -63,9 +63,18 @@ export const GET = requireAuth(async (request: NextRequest, { user }) => {
       whereClause.isHabit = true
     }
 
-    // Fetch activities
+    // Fetch activities with auto-trigger info
     const activities = await prisma.activity.findMany({
       where: whereClause,
+      include: {
+        autoTrigger: {
+          include: {
+            triggerActivity: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     })
 
@@ -83,6 +92,17 @@ export const GET = requireAuth(async (request: NextRequest, { user }) => {
       cueValue: activity.cueValue,
       createdAt: activity.createdAt,
       updatedAt: activity.updatedAt,
+      autoTrigger: activity.autoTrigger
+        ? {
+            id: activity.autoTrigger.id,
+            triggerType: activity.autoTrigger.triggerType,
+            thresholdValue: activity.autoTrigger.thresholdValue,
+            workoutTypeId: activity.autoTrigger.workoutTypeId,
+            triggerActivityId: activity.autoTrigger.triggerActivityId,
+            triggerActivityName: activity.autoTrigger.triggerActivity?.name,
+            isActive: activity.autoTrigger.isActive,
+          }
+        : null,
     }))
 
     return successResponse(activitiesResponse)
@@ -113,6 +133,7 @@ function isValidPillar(value: string): value is Pillar {
  * - frequency?: 'DAILY' | 'WEEKLY' | 'CUSTOM' (optional, defaults to DAILY)
  * - cueType?: 'TIME' | 'LOCATION' | 'AFTER_ACTIVITY' (optional)
  * - cueValue?: string (optional)
+ * - autoTrigger?: { triggerType, thresholdValue?, workoutTypeId?, triggerActivityId? } (optional)
  */
 export const POST = requireAuth(async (request: NextRequest, { user }) => {
   try {
@@ -127,6 +148,12 @@ export const POST = requireAuth(async (request: NextRequest, { user }) => {
       frequency?: string
       cueType?: string
       cueValue?: string
+      autoTrigger?: {
+        triggerType?: string
+        thresholdValue?: number
+        workoutTypeId?: number
+        triggerActivityId?: string
+      }
     }
 
     try {
@@ -145,6 +172,7 @@ export const POST = requireAuth(async (request: NextRequest, { user }) => {
       frequency = 'DAILY',
       cueType,
       cueValue,
+      autoTrigger,
     } = body
 
     // Validate required fields
@@ -196,7 +224,51 @@ export const POST = requireAuth(async (request: NextRequest, { user }) => {
       }
     }
 
-    // Create the activity
+    // Validate autoTrigger if provided
+    if (autoTrigger && autoTrigger.triggerType) {
+      const validTriggerTypes = Object.values(AutoTriggerType)
+      if (!validTriggerTypes.includes(autoTrigger.triggerType as AutoTriggerType)) {
+        return badRequestError(
+          `Invalid triggerType. Must be one of: ${validTriggerTypes.join(', ')}`
+        )
+      }
+
+      // Validate threshold for numeric trigger types
+      const numericTriggerTypes: AutoTriggerType[] = [
+        'WHOOP_RECOVERY_ABOVE',
+        'WHOOP_RECOVERY_BELOW',
+        'WHOOP_SLEEP_ABOVE',
+        'WHOOP_STRAIN_ABOVE',
+      ]
+      if (numericTriggerTypes.includes(autoTrigger.triggerType as AutoTriggerType)) {
+        if (autoTrigger.thresholdValue === undefined || autoTrigger.thresholdValue === null) {
+          return badRequestError('thresholdValue is required for this trigger type')
+        }
+      }
+
+      // Validate workoutTypeId for workout trigger
+      if (autoTrigger.triggerType === 'WHOOP_WORKOUT_TYPE') {
+        if (autoTrigger.workoutTypeId === undefined || autoTrigger.workoutTypeId === null) {
+          return badRequestError('workoutTypeId is required for WHOOP_WORKOUT_TYPE trigger')
+        }
+      }
+
+      // Validate triggerActivityId for activity trigger
+      if (autoTrigger.triggerType === 'ACTIVITY_COMPLETED') {
+        if (!autoTrigger.triggerActivityId) {
+          return badRequestError('triggerActivityId is required for ACTIVITY_COMPLETED trigger')
+        }
+        // Verify the trigger activity exists and belongs to the user
+        const triggerActivity = await prisma.activity.findFirst({
+          where: { id: autoTrigger.triggerActivityId, userId: user.id },
+        })
+        if (!triggerActivity) {
+          return badRequestError('Trigger activity not found')
+        }
+      }
+    }
+
+    // Create the activity (with autoTrigger if provided)
     const activity = await prisma.activity.create({
       data: {
         name,
@@ -209,6 +281,25 @@ export const POST = requireAuth(async (request: NextRequest, { user }) => {
         cueType: cueType ? (cueType as CueType) : null,
         cueValue: cueValue || null,
         userId: user.id,
+        ...(autoTrigger?.triggerType && {
+          autoTrigger: {
+            create: {
+              triggerType: autoTrigger.triggerType as AutoTriggerType,
+              thresholdValue: autoTrigger.thresholdValue ?? null,
+              workoutTypeId: autoTrigger.workoutTypeId ?? null,
+              triggerActivityId: autoTrigger.triggerActivityId ?? null,
+            },
+          },
+        }),
+      },
+      include: {
+        autoTrigger: {
+          include: {
+            triggerActivity: {
+              select: { id: true, name: true },
+            },
+          },
+        },
       },
     })
 
@@ -225,6 +316,17 @@ export const POST = requireAuth(async (request: NextRequest, { user }) => {
       cueValue: activity.cueValue,
       createdAt: activity.createdAt,
       updatedAt: activity.updatedAt,
+      autoTrigger: activity.autoTrigger
+        ? {
+            id: activity.autoTrigger.id,
+            triggerType: activity.autoTrigger.triggerType,
+            thresholdValue: activity.autoTrigger.thresholdValue,
+            workoutTypeId: activity.autoTrigger.workoutTypeId,
+            triggerActivityId: activity.autoTrigger.triggerActivityId,
+            triggerActivityName: activity.autoTrigger.triggerActivity?.name,
+            isActive: activity.autoTrigger.isActive,
+          }
+        : null,
     })
   } catch (error) {
     console.error('Activity creation error:', error)

@@ -21,10 +21,10 @@ export function AuthButton({
       type={type}
       disabled={isDisabled}
       className={`
-        w-full px-4 py-2.5 rounded-lg font-medium
-        bg-gray-900 text-white
-        hover:bg-gray-800
-        focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2
+        w-full px-4 py-2.5 rounded-xl font-medium
+        bg-body text-background
+        hover:bg-body/90
+        focus:outline-none focus:ring-2 focus:ring-body focus:ring-offset-2 focus:ring-offset-background
         disabled:opacity-50 disabled:cursor-not-allowed
         transition-colors duration-200
         flex items-center justify-center gap-2
@@ -32,7 +32,7 @@ export function AuthButton({
       {...props}
     >
       {isLoading && (
-        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-background/30 border-t-background" />
       )}
       {children}
     </button>

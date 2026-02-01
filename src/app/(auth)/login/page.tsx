@@ -79,8 +79,8 @@ export default function LoginPage() {
         transition={{ duration: 0.3, delay: 0.1 }}
         className="text-center mb-8"
       >
-        <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-        <p className="text-gray-600 mt-2">Sign in to continue your journey</p>
+        <h1 className="text-2xl font-bold text-text-primary">Welcome back</h1>
+        <p className="text-text-muted mt-2">Sign in to continue your journey</p>
       </motion.div>
 
       {/* Error message */}
@@ -88,9 +88,9 @@ export default function LoginPage() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-6 p-3 rounded-lg bg-red-50 border border-red-200"
+          className="mb-6 p-3 rounded-lg bg-red-500/10 border border-red-500/30"
         >
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="text-sm text-red-400">{error}</p>
         </motion.div>
       )}
 
@@ -158,12 +158,12 @@ export default function LoginPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, delay: 0.3 }}
-        className="text-center mt-6 text-sm text-gray-600"
+        className="text-center mt-6 text-sm text-text-muted"
       >
         Don&apos;t have an account?{' '}
         <Link
           href="/signup"
-          className="text-gray-900 font-medium hover:underline"
+          className="text-body font-medium hover:underline"
         >
           Sign up
         </Link>

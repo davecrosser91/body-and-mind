@@ -17,6 +17,7 @@ import {
 } from '@/lib/api-response'
 import { prisma } from '@/lib/db'
 import { Source } from '@prisma/client'
+import { evaluateAutoTriggers } from '@/lib/auto-trigger'
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -110,6 +111,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
         details: details || null,
         source,
       },
+    })
+
+    // Evaluate auto-triggers that depend on this activity being completed
+    // (runs async, errors are logged but don't affect the response)
+    evaluateAutoTriggers(user.id, {
+      completedActivityId: activity.id,
+    }).catch((error) => {
+      console.error('[AutoTrigger] Evaluation error after activity completion:', error)
     })
 
     return createdResponse({

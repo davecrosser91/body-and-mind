@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSubcategoriesForPillar, getSubcategoryConfig } from '@/lib/subcategories';
+import { useAuth } from '@/hooks/useAuth';
 
 type Pillar = 'BODY' | 'MIND';
 
@@ -25,6 +26,7 @@ export function ActivityLogModal({
   pillar,
   customCategories = [],
 }: ActivityLogModalProps) {
+  const { token } = useAuth();
   const [name, setName] = useState('');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>('');
   const [points, setPoints] = useState(25);
@@ -83,7 +85,10 @@ export function ActivityLogModal({
       // Step 1: Create the activity
       const createResponse = await fetch('/api/v1/activities', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           name: name.trim(),
           pillar,
@@ -109,7 +114,10 @@ export function ActivityLogModal({
       // Step 2: Complete the activity immediately
       const completeResponse = await fetch(`/api/v1/activities/${activityId}/complete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           details: notes.trim() || undefined,
           source: 'MANUAL',

@@ -111,11 +111,13 @@ interface RecommendationsData {
   };
 }
 
-interface HabitFromAPI {
+interface ActivityFromAPI {
   id: string;
   name: string;
-  category: string;
-  completedToday: boolean;
+  pillar: 'BODY' | 'MIND';
+  subCategory: string;
+  points: number;
+  isHabit: boolean;
 }
 
 // ============ HELPERS ============
@@ -201,28 +203,36 @@ export default function DashboardPage() {
       const [statusRes, recsRes, habitsRes] = await Promise.all([
         fetch('/api/v1/daily-status', { headers }),
         fetch('/api/v1/recommendations', { headers }),
-        fetch('/api/v1/habits', { headers }),
+        fetch('/api/v1/activities?habitsOnly=true', { headers }),
       ]);
 
-      if (statusRes.ok) {
-        const statusData = await statusRes.json();
+      // Parse responses once (can only call .json() once per Response)
+      const statusData = statusRes.ok ? await statusRes.json() : null;
+      const recsData = recsRes.ok ? await recsRes.json() : null;
+      const habitsData = habitsRes.ok ? await habitsRes.json() : null;
+
+      if (statusData) {
         setDailyStatus(statusData.data);
       }
 
-      if (recsRes.ok) {
-        const recsData = await recsRes.json();
+      if (recsData) {
         setRecommendations(recsData.data);
       }
 
-      if (habitsRes.ok) {
-        const habitsData = await habitsRes.json();
-        // Transform API habits to HabitNew format
-        const transformedHabits: HabitNew[] = habitsData.data.map((h: HabitFromAPI) => ({
+      if (habitsData && statusData) {
+        // Get completed activity IDs from daily status
+        const completedIds = new Set<string>([
+          ...(statusData.data?.body?.activities || []).map((a: { id: string }) => a.id),
+          ...(statusData.data?.mind?.activities || []).map((a: { id: string }) => a.id),
+        ]);
+
+        // Transform API activities to HabitNew format
+        const transformedHabits: HabitNew[] = habitsData.data.map((h: ActivityFromAPI) => ({
           id: h.id,
           name: h.name,
-          pillar: categoryToPillar(h.category),
-          subCategory: categoryToSubCategory(h.category),
-          completedToday: h.completedToday,
+          pillar: h.pillar,
+          subCategory: h.subCategory as SubCategory,
+          completedToday: completedIds.has(h.id),
         }));
         setHabits(transformedHabits);
       }
@@ -301,7 +311,7 @@ export default function DashboardPage() {
     if (!token) return;
 
     try {
-      const res = await fetch(`/api/v1/habits/${habitId}/complete`, {
+      const res = await fetch(`/api/v1/activities/${habitId}/complete`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -328,7 +338,7 @@ export default function DashboardPage() {
     if (!token) return;
 
     try {
-      const res = await fetch(`/api/v1/habits/${habitId}/complete`, {
+      const res = await fetch(`/api/v1/activities/${habitId}/complete`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

@@ -3,6 +3,7 @@ export { HabitCard } from './HabitCard'
 export { HabitListNew } from './HabitListNew'
 export type { HabitNew } from './HabitListNew'
 export { CreateHabitWizard } from './CreateHabitWizard'
+export { EditHabitModal } from './EditHabitModal'
 export type { CreateHabitFormData } from './CreateHabitWizard/types'
 
 // Utility components

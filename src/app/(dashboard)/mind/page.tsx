@@ -4,15 +4,45 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScoreRing } from '@/components/scores/ScoreRing';
-import { ActivityLogModal } from '@/components/activities/ActivityLogModal';
-import { SubCategoryTabs } from '@/components/subcategories/SubCategoryTabs';
-import { MeditationDashboard } from '@/components/subcategories/MeditationDashboard';
-import { ReadingDashboard } from '@/components/subcategories/ReadingDashboard';
-import { LearningDashboard } from '@/components/subcategories/LearningDashboard';
-import { JournalingDashboard } from '@/components/subcategories/JournalingDashboard';
-import { CustomDashboard } from '@/components/subcategories/CustomDashboard';
+import { ActivityLogModal, ActivityDetailModal } from '@/components/activities';
+import {
+  SubCategoryTabs,
+  MeditationDashboard,
+  ReadingDashboard,
+  LearningDashboard,
+  JournalingDashboard,
+  CustomDashboard,
+  AllActivitiesDashboard,
+  AddSubCategoryModal,
+  EditSubCategoryModal,
+} from '@/components/subcategories';
+import type { CustomSubcategory } from '@/components/subcategories';
 import { QuickLogChips } from '@/components/activities/QuickLogChips';
-import { PREDEFINED_SUBCATEGORIES } from '@/lib/subcategories';
+import { PREDEFINED_SUBCATEGORIES, getSubcategoryConfig, getSubcategoriesForPillar } from '@/lib/subcategories';
+import { useAuth } from '@/hooks/useAuth';
+import { DateNavigation } from '@/components/navigation';
+
+/**
+ * Check if a date is today
+ */
+function isDateToday(date: Date): boolean {
+  const today = new Date();
+  return (
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  );
+}
+
+/**
+ * Format date as YYYY-MM-DD
+ */
+function formatDateParam(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 // ============ TYPES ============
 
@@ -89,14 +119,16 @@ function MindPageSkeleton() {
 
 export default function MindPage() {
   const router = useRouter();
+  const { token } = useAuth();
 
   // State
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [dailyStatus, setDailyStatus] = useState<DailyStatusData | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('MEDITATION');
-  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [customSubcategories, setCustomSubcategories] = useState<CustomSubcategory[]>([]);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [isQuickLogging, setIsQuickLogging] = useState<string | null>(null);
   const [streak, setStreak] = useState(0);
@@ -104,6 +136,13 @@ export default function MindPage() {
     type: 'success' | 'error';
     message: string;
   } | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
+  // Derived state
+  const isToday = isDateToday(selectedDate);
+  const [showAddSubcategoryModal, setShowAddSubcategoryModal] = useState(false);
+  const [editingSubcategory, setEditingSubcategory] = useState<CustomSubcategory | null>(null);
 
   // Calculate points per subcategory
   const pointsByCategory = activityLogs.reduce<Record<string, number>>((acc, log) => {
@@ -126,13 +165,20 @@ export default function MindPage() {
 
   // Fetch all data
   const fetchData = useCallback(async () => {
-    try {
-      const today = new Date().toISOString().split('T')[0];
+    if (!token) return;
 
-      const [statusRes, activitiesRes, logsRes] = await Promise.all([
-        fetch('/api/v1/daily-status'),
-        fetch('/api/v1/activities?pillar=MIND'),
-        fetch(`/api/v1/activity-logs?pillar=MIND&date=${today}`),
+    setIsLoading(true);
+
+    try {
+      const dateStr = formatDateParam(selectedDate);
+      const dateParam = isDateToday(selectedDate) ? '' : `?date=${dateStr}`;
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const [statusRes, activitiesRes, logsRes, subcategoriesRes] = await Promise.all([
+        fetch(`/api/v1/daily-status${dateParam}`, { headers }),
+        fetch('/api/v1/activities?pillar=MIND', { headers }),
+        fetch(`/api/v1/activity-logs?pillar=MIND&date=${dateStr}`, { headers }),
+        fetch('/api/v1/subcategories?pillar=MIND', { headers }),
       ]);
 
       if (statusRes.ok) {
@@ -143,19 +189,16 @@ export default function MindPage() {
       if (activitiesRes.ok) {
         const activitiesData = await activitiesRes.json();
         setActivities(activitiesData.data || []);
-
-        // Extract custom categories (not predefined)
-        const allCategories = (activitiesData.data || []).map((a: Activity) =>
-          a.subCategory.toUpperCase()
-        );
-        const predefined = PREDEFINED_SUBCATEGORIES.MIND.map((c) => c.toUpperCase());
-        const custom = Array.from(new Set(allCategories.filter((c: string) => !predefined.includes(c)))) as string[];
-        setCustomCategories(custom);
       }
 
       if (logsRes.ok) {
         const logsData = await logsRes.json();
         setActivityLogs(logsData.data || []);
+      }
+
+      if (subcategoriesRes.ok) {
+        const data = await subcategoriesRes.json();
+        setCustomSubcategories(data.data.subcategories || []);
       }
 
       // TODO: Fetch streak data when API is available
@@ -165,7 +208,7 @@ export default function MindPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [token, selectedDate]);
 
   useEffect(() => {
     fetchData();
@@ -188,7 +231,10 @@ export default function MindPage() {
     try {
       const res = await fetch('/api/v1/activity-logs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ activityId }),
       });
 
@@ -212,13 +258,148 @@ export default function MindPage() {
 
   // Handle add custom category
   const handleAddCustomCategory = () => {
-    // For now, show the activity modal - custom category creation happens there
-    setShowActivityModal(true);
+    setShowAddSubcategoryModal(true);
   };
 
+  // Handle subcategory created
+  const handleSubcategoryCreated = (subcategory: CustomSubcategory) => {
+    setCustomSubcategories((prev) => [...prev, subcategory]);
+    setNotification({ type: 'success', message: `${subcategory.name} category created!` });
+  };
+
+  // Handle edit custom subcategory
+  const handleEditCustomSubcategory = (subcategory: CustomSubcategory) => {
+    setEditingSubcategory(subcategory);
+  };
+
+  // Handle subcategory updated
+  const handleSubcategoryUpdated = (updated: CustomSubcategory) => {
+    setCustomSubcategories((prev) =>
+      prev.map((s) => (s.id === updated.id ? updated : s))
+    );
+    setNotification({ type: 'success', message: `${updated.name} updated!` });
+  };
+
+  // Handle subcategory deleted
+  const handleSubcategoryDeleted = () => {
+    if (editingSubcategory) {
+      setCustomSubcategories((prev) =>
+        prev.filter((s) => s.id !== editingSubcategory.id)
+      );
+      // If we were viewing the deleted category, switch to ALL
+      if (selectedCategory === editingSubcategory.key) {
+        setSelectedCategory('ALL');
+      }
+      setNotification({ type: 'success', message: 'Category deleted!' });
+      fetchData(); // Refresh to update activities
+    }
+  };
+
+  // Get all available subcategories for reassignment dropdown
+  const getAllSubcategories = () => {
+    const predefined = getSubcategoriesForPillar('MIND').map((key) => ({
+      key,
+      name: getSubcategoryConfig(key)?.label || key,
+    }));
+    const custom = customSubcategories.map((s) => ({
+      key: s.key,
+      name: s.name,
+    }));
+    return [...predefined, ...custom];
+  };
+
+  // Handle activity selection (for edit/delete)
+  const handleActivitySelect = (activity: Activity) => {
+    setSelectedActivity(activity);
+    setShowDetailModal(true);
+  };
+
+  // Handle activity update
+  const handleActivityUpdate = async (id: string, data: Partial<Activity>) => {
+    try {
+      const res = await fetch(`/api/v1/activities/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (res.ok) {
+        setNotification({ type: 'success', message: 'Activity updated!' });
+        fetchData();
+        // Update the selected activity with new data
+        setSelectedActivity((prev) => (prev ? { ...prev, ...data } : null));
+      } else {
+        const error = await res.json();
+        setNotification({
+          type: 'error',
+          message: error.message || 'Failed to update activity',
+        });
+      }
+    } catch (error) {
+      console.error('Update error:', error);
+      setNotification({ type: 'error', message: 'Failed to update activity' });
+    }
+  };
+
+  // Handle activity delete
+  const handleActivityDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/v1/activities/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        setNotification({ type: 'success', message: 'Activity deleted!' });
+        setShowDetailModal(false);
+        setSelectedActivity(null);
+        fetchData();
+      } else {
+        const error = await res.json();
+        setNotification({
+          type: 'error',
+          message: error.message || 'Failed to delete activity',
+        });
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      setNotification({ type: 'error', message: 'Failed to delete activity' });
+    }
+  };
+
+  // Calculate mind score before renderDashboard
+  const mindScore = dailyStatus?.mind.score ?? 0;
 
   // Render the appropriate dashboard based on selected category
   const renderDashboard = () => {
+    // All activities view
+    if (selectedCategory === 'ALL') {
+      // Map daily status activities to the expected format
+      const completedActivities = (dailyStatus?.mind.activities ?? []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        category: a.category,
+        completedAt: a.completedAt,
+      }));
+
+      return (
+        <AllActivitiesDashboard
+          activities={activities}
+          completedActivities={completedActivities}
+          totalPoints={mindScore}
+          pillar="MIND"
+          onQuickLog={handleQuickLog}
+          onActivitySelect={(activity) => handleActivitySelect(activity as Activity)}
+          isLogging={isQuickLogging}
+        />
+      );
+    }
+
     const categoryActivities = currentCategoryLogs.map((log) => ({
       id: log.id,
       name: log.activityName,
@@ -275,13 +456,11 @@ export default function MindPage() {
     return <MindPageSkeleton />;
   }
 
-  const mindScore = dailyStatus?.mind.score ?? 0;
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="space-y-6 pb-8 max-w-2xl mx-auto"
+      className="space-y-6 pb-8 max-w-4xl mx-auto"
     >
       {/* Notification Toast */}
       <AnimatePresence>
@@ -349,14 +528,30 @@ export default function MindPage() {
             <p className="text-text-muted text-sm">Mental wellness tracking</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowActivityModal(true)}
-          className="px-4 py-2 rounded-lg font-medium text-background transition-colors hover:opacity-90"
-          style={{ backgroundColor: MIND_COLOR }}
-        >
-          Log Activity
-        </button>
+        {isToday && (
+          <button
+            onClick={() => setShowActivityModal(true)}
+            className="px-4 py-2 rounded-lg font-medium text-background transition-colors hover:opacity-90"
+            style={{ backgroundColor: MIND_COLOR }}
+          >
+            Log Activity
+          </button>
+        )}
       </motion.header>
+
+      {/* Date Navigation */}
+      <motion.section
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+      >
+        <DateNavigation
+          currentDate={selectedDate}
+          onDateChange={setSelectedDate}
+          isToday={isToday}
+          pillarColor={MIND_COLOR}
+        />
+      </motion.section>
 
       {/* Main Score Ring */}
       <motion.section
@@ -370,7 +565,7 @@ export default function MindPage() {
         {/* Points indicator */}
         <div className="mt-4 text-center">
           <span className="text-text-muted text-sm">
-            {mindScore}/100 points today
+            {mindScore}/100 points{isToday ? ' today' : ''}
           </span>
         </div>
       </motion.section>
@@ -411,30 +606,49 @@ export default function MindPage() {
         <SubCategoryTabs
           pillar="MIND"
           selectedCategory={selectedCategory}
-          customCategories={customCategories}
+          customCategories={customSubcategories}
           onSelect={setSelectedCategory}
           onAddCustom={handleAddCustomCategory}
+          onEditCustom={handleEditCustomSubcategory}
         />
       </motion.section>
 
-      {/* Quick Log Chips */}
-      <motion.section
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.25 }}
-      >
-        <QuickLogChips
-          activities={habitActivities.map((a) => ({
-            id: a.id,
-            name: a.name,
-            points: a.points,
-            subCategory: a.subCategory,
-          }))}
-          onLog={handleQuickLog}
-          isLogging={isQuickLogging}
-          pillarColor={MIND_COLOR}
-        />
-      </motion.section>
+      {/* Quick Log Chips (only for today) */}
+      {isToday && (
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+        >
+          <QuickLogChips
+            activities={habitActivities.map((a) => ({
+              id: a.id,
+              name: a.name,
+              points: a.points,
+              subCategory: a.subCategory,
+            }))}
+            onLog={handleQuickLog}
+            isLogging={isQuickLogging}
+            pillarColor={MIND_COLOR}
+          />
+        </motion.section>
+      )}
+
+      {/* Historical data indicator */}
+      {!isToday && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center py-2 px-4 rounded-lg bg-surface-light text-text-muted text-sm"
+        >
+          Viewing historical data for {selectedDate.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })}
+        </motion.div>
+      )}
 
       {/* Dashboard Content */}
       <motion.section
@@ -466,7 +680,37 @@ export default function MindPage() {
           setNotification({ type: 'success', message: 'Activity logged!' });
         }}
         pillar="MIND"
-        customCategories={customCategories}
+      />
+
+      {/* Activity Detail Modal (Edit/Delete) */}
+      <ActivityDetailModal
+        activity={selectedActivity}
+        isOpen={showDetailModal}
+        onClose={() => {
+          setShowDetailModal(false);
+          setSelectedActivity(null);
+        }}
+        onUpdate={handleActivityUpdate}
+        onDelete={handleActivityDelete}
+      />
+
+      {/* Add Subcategory Modal */}
+      <AddSubCategoryModal
+        isOpen={showAddSubcategoryModal}
+        onClose={() => setShowAddSubcategoryModal(false)}
+        onSuccess={handleSubcategoryCreated}
+        pillar="MIND"
+      />
+
+      {/* Edit Subcategory Modal */}
+      <EditSubCategoryModal
+        isOpen={!!editingSubcategory}
+        onClose={() => setEditingSubcategory(null)}
+        onSuccess={handleSubcategoryUpdated}
+        onDelete={handleSubcategoryDeleted}
+        subcategory={editingSubcategory}
+        pillar="MIND"
+        availableSubcategories={getAllSubcategories()}
       />
     </motion.div>
   );

@@ -31,12 +31,6 @@ const WHOOP_SPORT_NAMES: Record<number, string> = {
 
 // ============ CONSTANTS ============
 
-/** Base score awarded when a pillar is completed */
-const PILLAR_BASE_SCORE = 50;
-
-/** Bonus score per additional activity completed */
-const PILLAR_ACTIVITY_BONUS = 10;
-
 /** Recovery zone threshold - scores >= this are "green" (well recovered) */
 const RECOVERY_GREEN_THRESHOLD = 67;
 
@@ -117,6 +111,17 @@ export interface DailyStatus {
 }
 
 // ============ HELPER FUNCTIONS ============
+
+/**
+ * Check if two dates are the same day
+ */
+function isSameDay(date1: Date, date2: Date): boolean {
+  return (
+    date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate()
+  );
+}
 
 /**
  * Calculate hours remaining until midnight (local time)
@@ -378,16 +383,6 @@ async function getWhoopTraining(accessToken: string): Promise<WhoopTrainingData 
   }
 }
 
-/**
- * Calculate pillar score based on completed activities
- * Simple scoring: 100 if completed, 0 if not
- * Could be extended to calculate based on number/quality of activities
- */
-function calculatePillarScore(completed: boolean, activityCount: number): number {
-  if (!completed) return 0;
-  // Base score for completion, plus bonus for each additional activity up to 100
-  return Math.min(100, PILLAR_BASE_SCORE + activityCount * PILLAR_ACTIVITY_BONUS);
-}
 
 // ============ MAIN FUNCTION ============
 
@@ -400,20 +395,26 @@ function calculatePillarScore(completed: boolean, activityCount: number): number
  * - Streak with at-risk warning
  * - Recovery from Whoop (if available)
  * - Daily quote
+ *
+ * @param userId - The user ID
+ * @param date - Optional date to get status for (defaults to today)
  */
-export async function getDailyStatus(userId: string): Promise<DailyStatus> {
+export async function getDailyStatus(userId: string, date?: Date): Promise<DailyStatus> {
   const now = new Date();
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(now);
-  todayEnd.setHours(23, 59, 59, 999);
+  const targetDate = date || now;
+  const isToday = !date || isSameDay(targetDate, now);
 
-  // Get Whoop connection first
-  const whoopConnection = await getWhoopConnection(userId);
+  const dayStart = new Date(targetDate);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(targetDate);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  // Get Whoop connection first (only for today's data)
+  const whoopConnection = isToday ? await getWhoopConnection(userId) : null;
 
   // Fetch data in parallel
   const [activities, streaks, quote, recovery, sleep, training] = await Promise.all([
-    // Get activities with pillar info and today's completions
+    // Get activities with pillar info and completions for the target date
     prisma.activity.findMany({
       where: {
         userId,
@@ -424,8 +425,8 @@ export async function getDailyStatus(userId: string): Promise<DailyStatus> {
         completions: {
           where: {
             completedAt: {
-              gte: todayStart,
-              lte: todayEnd,
+              gte: dayStart,
+              lte: dayEnd,
             },
           },
           orderBy: { completedAt: 'desc' },
@@ -439,9 +440,11 @@ export async function getDailyStatus(userId: string): Promise<DailyStatus> {
     whoopConnection ? getWhoopTraining(whoopConnection.accessToken) : Promise.resolve(null),
   ]);
 
-  // Separate activities by pillar and collect completed ones
+  // Separate activities by pillar and collect completed ones, summing points
   const bodyCompletedActivities: CompletedActivity[] = [];
   const mindCompletedActivities: CompletedActivity[] = [];
+  let bodyPoints = 0;
+  let mindPoints = 0;
 
   for (const activity of activities) {
     if (activity.completions.length > 0) {
@@ -457,35 +460,38 @@ export async function getDailyStatus(userId: string): Promise<DailyStatus> {
 
       if (activity.pillar === 'BODY') {
         bodyCompletedActivities.push(completedActivity);
+        bodyPoints += completion.pointsEarned;
       } else if (activity.pillar === 'MIND') {
         mindCompletedActivities.push(completedActivity);
+        mindPoints += completion.pointsEarned;
       }
     }
   }
 
-  // Determine completion status (at least 1 activity per pillar)
-  const bodyCompleted = bodyCompletedActivities.length >= 1;
-  const mindCompleted = mindCompletedActivities.length >= 1;
+  // Determine completion status (100+ points per pillar = complete)
+  const POINTS_THRESHOLD = 100;
+  const bodyCompleted = bodyPoints >= POINTS_THRESHOLD;
+  const mindCompleted = mindPoints >= POINTS_THRESHOLD;
 
-  // Calculate hours remaining
-  const hoursRemaining = getHoursRemainingToday();
+  // Calculate hours remaining (only relevant for today)
+  const hoursRemaining = isToday ? getHoursRemainingToday() : 0;
 
-  // Determine if streak is at risk
+  // Determine if streak is at risk (only relevant for today)
   // At risk if: has a streak AND (body OR mind not completed)
   const overallStreak = streaks.overall.current;
-  const atRisk = overallStreak > 0 && (!bodyCompleted || !mindCompleted);
+  const atRisk = isToday && overallStreak > 0 && (!bodyCompleted || !mindCompleted);
 
   // Build response
   const dailyStatus: DailyStatus = {
-    date: todayStart.toISOString().split('T')[0] as string,
+    date: dayStart.toISOString().split('T')[0] as string,
     body: {
       completed: bodyCompleted,
-      score: calculatePillarScore(bodyCompleted, bodyCompletedActivities.length),
+      score: bodyPoints,
       activities: bodyCompletedActivities,
     },
     mind: {
       completed: mindCompleted,
-      score: calculatePillarScore(mindCompleted, mindCompletedActivities.length),
+      score: mindPoints,
       activities: mindCompletedActivities,
     },
     streak: {

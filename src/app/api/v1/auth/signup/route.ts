@@ -1,8 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { hashPassword, generateToken } from '@/lib/auth'
 import { HabitanimalType } from '@prisma/client'
+import {
+  createdResponse,
+  validationError,
+  conflictError,
+  internalError,
+} from '@/lib/api-response'
 
 // Validation schema for signup request
 const signupSchema = z.object({
@@ -53,12 +59,9 @@ export async function POST(request: NextRequest) {
     // Validate request body
     const result = signupSchema.safeParse(body)
     if (!result.success) {
-      return NextResponse.json(
-        {
-          error: 'Validation failed',
-          details: result.error.flatten().fieldErrors,
-        },
-        { status: 400 }
+      return validationError(
+        'Validation failed',
+        result.error.flatten().fieldErrors
       )
     }
 
@@ -70,10 +73,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (existingUser) {
-      return NextResponse.json(
-        { error: 'Email already registered' },
-        { status: 409 }
-      )
+      return conflictError('Email already registered')
     }
 
     // Hash password
@@ -104,23 +104,16 @@ export async function POST(request: NextRequest) {
     // Generate JWT token
     const token = await generateToken(user.id, user.email)
 
-    return NextResponse.json(
-      {
-        message: 'User created successfully',
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-        },
-        token,
+    return createdResponse({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
       },
-      { status: 201 }
-    )
+      token,
+    })
   } catch (error) {
     console.error('Signup error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return internalError()
   }
 }

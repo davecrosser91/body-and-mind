@@ -11,6 +11,7 @@ interface ScoreRingProps {
   size?: number;
   strokeWidth?: number;
   showLabel?: boolean;
+  showScore?: boolean;
   animate?: boolean;
   className?: string;
 }
@@ -39,6 +40,7 @@ export function ScoreRing({
   size = 160,
   strokeWidth = 8,
   showLabel = true,
+  showScore = true,
   animate = true,
   className = '',
 }: ScoreRingProps) {
@@ -134,28 +136,32 @@ export function ScoreRing({
       </svg>
 
       {/* Center content */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        {/* Score number - size scales with ring */}
-        <motion.span
-          className="font-bold tabular-nums"
-          style={{
-            color: colors.primary,
-            fontSize: size * 0.22,
-          }}
-        >
-          {displayScore}
-        </motion.span>
+      {(showScore || showLabel) && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          {/* Score number - size scales with ring */}
+          {showScore && (
+            <motion.span
+              className="font-bold tabular-nums"
+              style={{
+                color: colors.primary,
+                fontSize: size * 0.22,
+              }}
+            >
+              {displayScore}
+            </motion.span>
+          )}
 
-        {/* Label */}
-        {showLabel && (
-          <span
-            className="text-text-muted uppercase tracking-wider"
-            style={{ fontSize: Math.max(10, size * 0.075), marginTop: size * 0.02 }}
-          >
-            {colors.label}
-          </span>
-        )}
-      </div>
+          {/* Label */}
+          {showLabel && (
+            <span
+              className="text-text-muted uppercase tracking-wider"
+              style={{ fontSize: Math.max(10, size * 0.075), marginTop: size * 0.02 }}
+            >
+              {colors.label}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Breathing glow animation */}
       <motion.div

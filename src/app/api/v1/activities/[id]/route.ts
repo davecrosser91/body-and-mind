@@ -16,7 +16,7 @@ import {
   internalError,
 } from '@/lib/api-response'
 import { prisma } from '@/lib/db'
-import { Pillar, Frequency, CueType } from '@prisma/client'
+import { Pillar, Frequency, CueType, AutoTriggerType } from '@prisma/client'
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return badRequestError('Activity ID is required')
     }
 
-    // Fetch activity with aggregated completion data
+    // Fetch activity with aggregated completion data and auto-trigger
     const activity = await prisma.activity.findFirst({
       where: {
         id: activityId,
@@ -65,6 +65,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
           take: 1,
           select: {
             completedAt: true,
+          },
+        },
+        autoTrigger: {
+          select: {
+            id: true,
+            triggerType: true,
+            thresholdValue: true,
+            workoutTypeId: true,
+            triggerActivityId: true,
+            isActive: true,
           },
         },
       },
@@ -91,6 +101,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       updatedAt: activity.updatedAt,
       completionCount: activity._count.completions,
       lastCompletionDate: lastCompletion?.completedAt || null,
+      autoTrigger: activity.autoTrigger,
     })
   } catch (error) {
     console.error('Activity fetch error:', error)
@@ -153,6 +164,12 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       frequency?: string
       cueType?: string | null
       cueValue?: string | null
+      autoTrigger?: {
+        triggerType: string
+        thresholdValue?: number
+        workoutTypeId?: number
+        triggerActivityId?: string
+      } | null
     }
 
     try {
@@ -171,6 +188,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       frequency,
       cueType,
       cueValue,
+      autoTrigger,
     } = body
 
     // Build update data
@@ -287,6 +305,86 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       data: updateData,
     })
 
+    // If points were changed, update today's completions to reflect new points
+    if (points !== undefined && points !== existingActivity.points) {
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const todayEnd = new Date()
+      todayEnd.setHours(23, 59, 59, 999)
+
+      await prisma.activityCompletion.updateMany({
+        where: {
+          activityId: activityId,
+          completedAt: {
+            gte: todayStart,
+            lte: todayEnd,
+          },
+        },
+        data: {
+          pointsEarned: points,
+        },
+      })
+    }
+
+    // Handle autoTrigger updates
+    let updatedAutoTrigger = null
+    if (autoTrigger !== undefined) {
+      if (autoTrigger === null) {
+        // Remove existing auto-trigger
+        await prisma.autoTrigger.deleteMany({
+          where: { activityId },
+        })
+      } else {
+        // Validate trigger type
+        const validTriggerTypes = Object.values(AutoTriggerType)
+        if (!validTriggerTypes.includes(autoTrigger.triggerType as AutoTriggerType)) {
+          return badRequestError(
+            `Invalid triggerType. Must be one of: ${validTriggerTypes.join(', ')}`
+          )
+        }
+
+        // Upsert auto-trigger
+        updatedAutoTrigger = await prisma.autoTrigger.upsert({
+          where: { activityId },
+          create: {
+            activityId,
+            triggerType: autoTrigger.triggerType as AutoTriggerType,
+            thresholdValue: autoTrigger.thresholdValue,
+            workoutTypeId: autoTrigger.workoutTypeId,
+            triggerActivityId: autoTrigger.triggerActivityId,
+            isActive: true,
+          },
+          update: {
+            triggerType: autoTrigger.triggerType as AutoTriggerType,
+            thresholdValue: autoTrigger.thresholdValue,
+            workoutTypeId: autoTrigger.workoutTypeId,
+            triggerActivityId: autoTrigger.triggerActivityId,
+          },
+          select: {
+            id: true,
+            triggerType: true,
+            thresholdValue: true,
+            workoutTypeId: true,
+            triggerActivityId: true,
+            isActive: true,
+          },
+        })
+      }
+    } else {
+      // Fetch existing auto-trigger if not being updated
+      updatedAutoTrigger = await prisma.autoTrigger.findUnique({
+        where: { activityId },
+        select: {
+          id: true,
+          triggerType: true,
+          thresholdValue: true,
+          workoutTypeId: true,
+          triggerActivityId: true,
+          isActive: true,
+        },
+      })
+    }
+
     return successResponse({
       id: updatedActivity.id,
       name: updatedActivity.name,
@@ -300,6 +398,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       cueValue: updatedActivity.cueValue,
       createdAt: updatedActivity.createdAt,
       updatedAt: updatedActivity.updatedAt,
+      autoTrigger: updatedAutoTrigger,
     })
   } catch (error) {
     console.error('Activity update error:', error)

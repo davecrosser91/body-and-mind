@@ -47,7 +47,7 @@ export function StacksView() {
   const handleCreate = async (data: {
     name: string;
     description?: string;
-    habitIds: string[];
+    activityIds: string[];
     cueType?: CueType | null;
     cueValue?: string | null;
     completionBonus?: number;
@@ -55,7 +55,7 @@ export function StacksView() {
     await createStack({
       name: data.name,
       description: data.description,
-      habitIds: data.habitIds,
+      activityIds: data.activityIds,
       cueType: data.cueType as 'TIME' | 'LOCATION' | 'AFTER_ACTIVITY' | null,
       cueValue: data.cueValue,
       completionBonus: data.completionBonus,

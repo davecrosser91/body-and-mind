@@ -21,6 +21,8 @@ interface HabitListNewProps {
   onComplete: (habitId: string, details?: string) => Promise<void>;
   onUncomplete: (habitId: string) => Promise<void>;
   onHabitCreated?: (habit: HabitNew) => void;
+  onEdit?: (habitId: string) => void;
+  onDelete?: (habitId: string) => void;
   showAddButton?: boolean;
 }
 
@@ -31,6 +33,8 @@ export function HabitListNew({
   onComplete,
   onUncomplete,
   onHabitCreated,
+  onEdit,
+  onDelete,
   showAddButton = true,
 }: HabitListNewProps) {
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -217,6 +221,8 @@ export function HabitListNew({
                       isLoading={loadingHabits.has(habit.id)}
                       onComplete={handleComplete}
                       onUncomplete={handleUncomplete}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
                     />
                   ))}
                 </AnimatePresence>
@@ -244,6 +250,8 @@ export function HabitListNew({
                       isLoading={loadingHabits.has(habit.id)}
                       onComplete={handleComplete}
                       onUncomplete={handleUncomplete}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
                     />
                   ))}
                 </AnimatePresence>
@@ -263,6 +271,8 @@ export function HabitListNew({
                 isLoading={loadingHabits.has(habit.id)}
                 onComplete={handleComplete}
                 onUncomplete={handleUncomplete}
+                onEdit={onEdit}
+                onDelete={onDelete}
               />
             ))}
           </AnimatePresence>

@@ -7,9 +7,265 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============ ENUMS ============
+model Achievement {
+  id         String   @id
+  type       String
+  unlockedAt DateTime @default(now())
+  userId     String
+  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-// Legacy - kept for backward compatibility during migration
+  @@unique([userId, type])
+  @@index([userId])
+}
+
+model Activity {
+  id                                                  String               @id
+  name                                                String
+  pillar                                              Pillar
+  subCategory                                         String
+  frequency                                           Frequency            @default(DAILY)
+  description                                         String?
+  points                                              Int                  @default(25)
+  isHabit                                             Boolean              @default(true)
+  cueType                                             CueType?
+  cueValue                                            String?
+  createdAt                                           DateTime             @default(now())
+  updatedAt                                           DateTime
+  archived                                            Boolean              @default(false)
+  userId                                              String
+  User                                                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ActivityCompletion                                  ActivityCompletion[]
+  AutoTrigger_AutoTrigger_activityIdToActivity        AutoTrigger?         @relation("AutoTrigger_activityIdToActivity")
+  AutoTrigger_AutoTrigger_triggerActivityIdToActivity AutoTrigger[]        @relation("AutoTrigger_triggerActivityIdToActivity")
+
+  @@index([pillar])
+  @@index([subCategory])
+  @@index([userId])
+}
+
+model ActivityCompletion {
+  id           String   @id
+  completedAt  DateTime @default(now())
+  pointsEarned Int
+  details      String?
+  source       Source   @default(MANUAL)
+  activityId   String
+  Activity     Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@index([activityId])
+  @@index([completedAt])
+}
+
+model AutoTrigger {
+  id                                               String          @id
+  activityId                                       String          @unique
+  triggerType                                      AutoTriggerType
+  thresholdValue                                   Float?
+  workoutTypeId                                    Int?
+  triggerActivityId                                String?
+  isActive                                         Boolean         @default(true)
+  createdAt                                        DateTime        @default(now())
+  updatedAt                                        DateTime
+  Activity_AutoTrigger_activityIdToActivity        Activity        @relation("AutoTrigger_activityIdToActivity", fields: [activityId], references: [id], onDelete: Cascade)
+  Activity_AutoTrigger_triggerActivityIdToActivity Activity?       @relation("AutoTrigger_triggerActivityIdToActivity", fields: [triggerActivityId], references: [id])
+
+  @@index([activityId])
+  @@index([triggerType])
+}
+
+model CustomSubcategory {
+  id        String   @id
+  userId    String
+  pillar    Pillar
+  name      String
+  key       String
+  color     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pillar, key])
+  @@index([userId])
+}
+
+model DailyGoal {
+  id             String   @id
+  userId         String
+  date           DateTime @db.Date
+  bodyCompleted  Boolean  @default(false)
+  mindCompleted  Boolean  @default(false)
+  bodyActivities String[]
+  mindActivities String[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime
+  User           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
+}
+
+model DailyScore {
+  id              String   @id
+  date            DateTime @db.Date
+  bodyScore       Int
+  mindScore       Int
+  balanceIndex    Int
+  trainingScore   Int?
+  sleepScore      Int?
+  nutritionScore  Int?
+  meditationScore Int?
+  readingScore    Int?
+  learningScore   Int?
+  whoopStrain     Float?
+  whoopSleep      Float?
+  whoopRecovery   Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime
+  userId          String
+  bodyComplete    Boolean  @default(false)
+  bodyPoints      Int      @default(0)
+  mindComplete    Boolean  @default(false)
+  mindPoints      Int      @default(0)
+  User            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([date])
+  @@index([userId])
+}
+
+model HabitStack {
+  id              String            @id
+  userId          String
+  name            String
+  description     String?
+  cueType         CueType?
+  cueValue        String?
+  isPreset        Boolean           @default(false)
+  presetKey       String?
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime
+  completionBonus Int               @default(20)
+  activityIds     String[]
+  User            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  StackCompletion StackCompletion[]
+
+  @@index([userId])
+}
+
+model Habitanimal {
+  id              String          @id
+  type            HabitanimalType
+  species         String
+  name            String
+  level           Int             @default(1)
+  xp              Int             @default(0)
+  health          Int             @default(100)
+  evolutionStage  Int             @default(1)
+  lastInteraction DateTime        @default(now())
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime
+  userId          String
+  User            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Quote {
+  id        String        @id
+  text      String
+  author    String?
+  category  QuoteCategory
+  createdAt DateTime      @default(now())
+
+  @@index([category])
+  @@index([createdAt])
+}
+
+model StackCompletion {
+  id                String     @id
+  stackId           String
+  date              DateTime   @db.Date
+  completedAt       DateTime   @default(now())
+  bonusPointsEarned Int        @default(0)
+  streakDay         Int        @default(1)
+  HabitStack        HabitStack @relation(fields: [stackId], references: [id], onDelete: Cascade)
+
+  @@unique([stackId, date])
+  @@index([date])
+  @@index([stackId])
+}
+
+model Streak {
+  id             String    @id
+  current        Int       @default(0)
+  longest        Int       @default(0)
+  lastActiveDate DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime
+  userId         String
+  pillarKey      String
+  User           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pillarKey])
+  @@index([userId])
+}
+
+model User {
+  id                String              @id
+  email             String              @unique
+  passwordHash      String
+  name              String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime
+  Achievement       Achievement[]
+  Activity          Activity[]
+  CustomSubcategory CustomSubcategory[]
+  DailyGoal         DailyGoal[]
+  DailyScore        DailyScore[]
+  HabitStack        HabitStack[]
+  Habitanimal       Habitanimal[]
+  Streak            Streak[]
+  WeightConfig      WeightConfig?
+  WhoopConnection   WhoopConnection?
+}
+
+model WeightConfig {
+  id               String       @id
+  userId           String       @unique
+  preset           WeightPreset @default(BALANCED)
+  trainingWeight   Int          @default(35)
+  sleepWeight      Int          @default(35)
+  nutritionWeight  Int          @default(30)
+  meditationWeight Int          @default(40)
+  readingWeight    Int          @default(30)
+  learningWeight   Int          @default(30)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime
+  User             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WhoopConnection {
+  id           String    @id
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  lastSync     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime
+  userId       String    @unique
+  User         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum AutoTriggerType {
+  WHOOP_RECOVERY_ABOVE
+  WHOOP_RECOVERY_BELOW
+  WHOOP_SLEEP_ABOVE
+  WHOOP_STRAIN_ABOVE
+  WHOOP_WORKOUT_TYPE
+  ACTIVITY_COMPLETED
+}
+
 enum Category {
   FITNESS
   MINDFULNESS
@@ -18,21 +274,11 @@ enum Category {
   LEARNING
 }
 
-enum HabitanimalType {
-  FITNESS      // Guiro the Gorilla
-  MINDFULNESS  // Zen the Turtle
-  NUTRITION    // Greeny the Ox
-  SLEEP        // Milo the Sloth
-  LEARNING     // Finn the Fox
+enum CueType {
+  TIME
+  LOCATION
+  AFTER_ACTIVITY
 }
-
-// NEW: Body + Mind pillars
-enum Pillar {
-  BODY
-  MIND
-}
-
-// SubCategory enum DELETED - now using String for custom subcategories
 
 enum Frequency {
   DAILY
@@ -40,12 +286,17 @@ enum Frequency {
   CUSTOM
 }
 
-enum WeightPreset {
-  BALANCED
-  ATHLETE
-  RECOVERY
-  KNOWLEDGE
-  CUSTOM
+enum HabitanimalType {
+  FITNESS
+  MINDFULNESS
+  NUTRITION
+  SLEEP
+  LEARNING
+}
+
+enum Pillar {
+  BODY
+  MIND
 }
 
 enum QuoteCategory {
@@ -61,259 +312,13 @@ enum Source {
   MANUAL
   WHOOP
   APPLE_HEALTH
+  AUTO_TRIGGER
 }
 
-enum CueType {
-  TIME
-  LOCATION
-  AFTER_ACTIVITY
-}
-
-// ============ MODELS ============
-
-model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String
-  name          String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  activities        Activity[]
-  habitanimals      Habitanimal[]
-  whoopConnection   WhoopConnection?
-  dailyScores       DailyScore[]
-  streaks           Streak[]
-  achievements      Achievement[]
-  dailyGoals        DailyGoal[]
-  weightConfig      WeightConfig?
-  habitStacks       HabitStack[]
-}
-
-model Activity {
-  id          String       @id @default(cuid())
-  name        String
-  pillar      Pillar
-  subCategory String       // Changed from enum to string for custom subcategories
-  frequency   Frequency    @default(DAILY)
-  description String?
-  points      Int          @default(25)
-  isHabit     Boolean      @default(true)  // true = recurring habit
-  cueType     CueType?
-  cueValue    String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  archived    Boolean      @default(false)
-
-  userId      String
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  completions ActivityCompletion[]
-
-  @@index([userId])
-  @@index([pillar])
-  @@index([subCategory])
-}
-
-model ActivityCompletion {
-  id           String    @id @default(cuid())
-  completedAt  DateTime  @default(now())
-  pointsEarned Int       // snapshot of points at completion
-  details      String?
-  source       Source    @default(MANUAL)
-
-  activityId   String
-  activity     Activity  @relation(fields: [activityId], references: [id], onDelete: Cascade)
-
-  @@index([activityId])
-  @@index([completedAt])
-}
-
-model Habitanimal {
-  id              String          @id @default(cuid())
-  type            HabitanimalType
-  species         String          // "gorilla", "turtle", "ox", "sloth", "fox"
-  name            String          // "Guiro", "Zen", "Greeny", "Milo", "Finn"
-  level           Int             @default(1)
-  xp              Int             @default(0)
-  health          Int             @default(100)
-  evolutionStage  Int             @default(1)
-  lastInteraction DateTime        @default(now())
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-
-  userId          String
-  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model WhoopConnection {
-  id            String    @id @default(cuid())
-  accessToken   String
-  refreshToken  String
-  expiresAt     DateTime
-  lastSync      DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  userId        String    @unique
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-// ============ NEW MODELS FOR BODY + MIND SYSTEM ============
-
-model DailyScore {
-  id        String   @id @default(cuid())
-  date      DateTime @db.Date
-
-  // Main scores (0-100)
-  bodyScore      Int
-  mindScore      Int
-  balanceIndex   Int
-
-  // Points tracking
-  bodyPoints     Int       @default(0)
-  mindPoints     Int       @default(0)
-  bodyComplete   Boolean   @default(false)
-  mindComplete   Boolean   @default(false)
-
-  // Body sub-scores
-  trainingScore  Int?
-  sleepScore     Int?
-  nutritionScore Int?
-
-  // Mind sub-scores
-  meditationScore Int?
-  readingScore    Int?
-  learningScore   Int?
-
-  // Whoop data snapshot (for reference)
-  whoopStrain    Float?
-  whoopSleep     Float?
-  whoopRecovery  Float?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, date])
-  @@index([userId])
-  @@index([date])
-}
-
-model Streak {
-  id        String   @id @default(cuid())
-  pillarKey String   // "BODY", "MIND", or "OVERALL"
-  current   Int      @default(0)
-  longest   Int      @default(0)
-  lastActiveDate DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, pillarKey])
-  @@index([userId])
-}
-
-model Achievement {
-  id          String   @id @default(cuid())
-  type        String   // e.g., "streak_7", "streak_30", "perfect_balance", "first_workout"
-  unlockedAt  DateTime @default(now())
-
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, type])
-  @@index([userId])
-}
-
-model Quote {
-  id        String        @id @default(cuid())
-  text      String
-  author    String?
-  category  QuoteCategory
-  createdAt DateTime      @default(now())
-
-  @@index([category])
-  @@index([createdAt])
-}
-
-model DailyGoal {
-  id             String   @id @default(cuid())
-  userId         String
-  date           DateTime @db.Date
-  bodyCompleted  Boolean  @default(false)
-  mindCompleted  Boolean  @default(false)
-  bodyActivities String[] // Activity IDs
-  mindActivities String[] // Activity IDs
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, date])
-  @@index([userId])
-}
-
-model WeightConfig {
-  id        String       @id @default(cuid())
-  userId    String       @unique
-  preset    WeightPreset @default(BALANCED)
-
-  // Body weights (must sum to 100)
-  trainingWeight  Int @default(35)
-  sleepWeight     Int @default(35)
-  nutritionWeight Int @default(30)
-
-  // Mind weights (must sum to 100)
-  meditationWeight Int @default(40)
-  readingWeight    Int @default(30)
-  learningWeight   Int @default(30)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model HabitStack {
-  id          String   @id @default(cuid())
-  userId      String
-  name        String
-  description String?
-  activityIds String[] // Activity IDs in order (the actual activities)
-  cueType     CueType?
-  cueValue    String?  // Time (HH:mm) or location name
-  isPreset    Boolean  @default(false)
-  presetKey   String?  // e.g., "morning_momentum" - presets are templates, user copies them
-  isActive    Boolean  @default(true)
-  completionBonus Int  @default(20) // Bonus percentage when stack completed in order
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  completions StackCompletion[]
-
-  @@index([userId])
-}
-
-model StackCompletion {
-  id                String   @id @default(cuid())
-  stackId           String
-  date              DateTime @db.Date
-  completedAt       DateTime @default(now())
-  bonusPointsEarned Int      @default(0)
-  streakDay         Int      @default(1) // Which day of the streak this is
-
-  stack HabitStack @relation(fields: [stackId], references: [id], onDelete: Cascade)
-
-  @@unique([stackId, date])
-  @@index([stackId])
-  @@index([date])
+enum WeightPreset {
+  BALANCED
+  ATHLETE
+  RECOVERY
+  KNOWLEDGE
+  CUSTOM
 }

@@ -1,4 +1,4 @@
-import { Pillar, Frequency, CueType } from '@prisma/client';
+import { Pillar, Frequency, CueType, AutoTriggerType } from '@prisma/client';
 
 // SubCategory is now a string type (no longer a Prisma enum)
 export type SubCategory = 'TRAINING' | 'SLEEP' | 'NUTRITION' | 'MEDITATION' | 'READING' | 'LEARNING' | 'JOURNALING';
@@ -9,6 +9,13 @@ export interface HabitStack {
   description: string | null;
   activities: string[];
   isActive: boolean;
+}
+
+export interface AutoTriggerConfig {
+  triggerType: AutoTriggerType;
+  thresholdValue?: number;
+  workoutTypeId?: number;
+  triggerActivityId?: string;
 }
 
 export interface CreateHabitFormData {
@@ -24,6 +31,9 @@ export interface CreateHabitFormData {
   cueType: CueType | null;
   cueValue: string;
 
+  // Step 2b: Auto-Trigger (optional)
+  autoTrigger: AutoTriggerConfig | null;
+
   // Step 3: Stacking
   addToStackId: string | null;
 }
@@ -37,6 +47,7 @@ export const INITIAL_FORM_DATA: CreateHabitFormData = {
   points: 25,
   cueType: null,
   cueValue: '',
+  autoTrigger: null,
   addToStackId: null,
 };
 

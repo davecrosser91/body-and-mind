@@ -10,7 +10,7 @@ const WHOOP_TOKEN_URL = 'https://api.prod.whoop.com/oauth/oauth2/token'
 
 // Scopes needed for the integration
 // 'offline' scope is required to get a refresh_token
-const WHOOP_SCOPES = ['read:profile', 'read:sleep', 'read:workout', 'read:recovery', 'offline']
+const WHOOP_SCOPES = ['read:profile', 'read:cycles', 'read:sleep', 'read:workout', 'read:recovery', 'offline']
 
 export interface WhoopApiError {
   error: string
@@ -133,7 +133,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<WhoopTok
 
 /**
  * Make an authenticated request to the Whoop API
- * @param endpoint - The API endpoint (e.g., '/developer/v1/user/profile/basic')
+ * @param endpoint - The API endpoint (e.g., '/developer/v2/cycle')
  * @param accessToken - The access token for authentication
  * @param options - Additional fetch options
  * @returns The parsed JSON response
@@ -144,6 +144,7 @@ export async function whoopFetch<T = unknown>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${WHOOP_API_BASE}${endpoint}`
+  console.log('Whoop API request:', url)
 
   const response = await fetch(url, {
     ...options,
@@ -156,6 +157,12 @@ export async function whoopFetch<T = unknown>(
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}))
+    console.error('Whoop API error response:', {
+      url,
+      status: response.status,
+      statusText: response.statusText,
+      body: errorBody
+    })
     const error = new Error(
       `Whoop API error: ${response.status} ${response.statusText}`
     ) as Error & { status: number; body: unknown }
@@ -164,7 +171,9 @@ export async function whoopFetch<T = unknown>(
     throw error
   }
 
-  return response.json()
+  const data = await response.json()
+  console.log('Whoop API success:', url, JSON.stringify(data).substring(0, 500))
+  return data
 }
 
 /**

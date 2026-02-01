@@ -6,5 +6,8 @@ export { ReadingDashboard } from './ReadingDashboard';
 export { LearningDashboard } from './LearningDashboard';
 export { JournalingDashboard } from './JournalingDashboard';
 export { CustomDashboard } from './CustomDashboard';
+export { AllActivitiesDashboard } from './AllActivitiesDashboard';
 export { SubCategoryTabs } from './SubCategoryTabs';
 export { AddSubCategoryModal } from './AddSubCategoryModal';
+export { EditSubCategoryModal } from './EditSubCategoryModal';
+export type { CustomSubcategory } from './AddSubCategoryModal';

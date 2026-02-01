@@ -9,6 +9,7 @@ import { prisma } from '@/lib/db'
 import { whoopFetch, refreshAccessToken, isTokenExpired, calculateExpiresAt } from '@/lib/whoop'
 import { calculateLevel, calculateEvolutionStage } from '@/lib/xp'
 import { recoverHealth } from '@/lib/habitanimal-health'
+import { evaluateAutoTriggers, TriggerContext } from '@/lib/auto-trigger'
 import { HabitanimalType } from '@prisma/client'
 
 // ============ WHOOP API TYPES ============
@@ -128,6 +129,8 @@ export interface SyncResult {
     fitness: number
     total: number
   }
+  autoTriggersEvaluated: number
+  autoTriggersActivated: number
   errors: string[]
 }
 
@@ -274,6 +277,91 @@ async function getOrCreateWhoopActivity(
   return activity.id
 }
 
+// ============ HELPER: FETCH LATEST WHOOP DATA ============
+
+interface LatestWhoopData {
+  recovery?: number
+  sleepHours?: number
+  strain?: number
+  workoutTypeId?: number
+}
+
+/**
+ * Fetch the LATEST Whoop data for auto-trigger evaluation.
+ * Uses cycle-based approach (like daily-status) to get current values,
+ * not just data from the sync window.
+ */
+async function fetchLatestWhoopData(accessToken: string): Promise<LatestWhoopData> {
+  const data: LatestWhoopData = {}
+
+  try {
+    // Get latest cycle for recovery
+    const cycleResponse = await whoopFetch<WhoopPaginatedResponse<{ id: number; score?: { strain: number } }>>(
+      `/developer/v2/cycle?limit=1`,
+      accessToken
+    )
+    const cycle = cycleResponse.records[0]
+
+    if (cycle) {
+      // Get strain from cycle
+      if (cycle.score?.strain !== undefined) {
+        data.strain = cycle.score.strain
+      }
+
+      // Get recovery for this cycle
+      try {
+        const recovery = await whoopFetch<WhoopRecovery>(
+          `/developer/v2/cycle/${cycle.id}/recovery`,
+          accessToken
+        )
+        if (recovery?.score?.recovery_score !== undefined) {
+          data.recovery = recovery.score.recovery_score
+        }
+      } catch {
+        // Recovery not available for this cycle
+      }
+    }
+  } catch (error) {
+    console.log('[AutoTrigger] Failed to fetch cycle/recovery:', error)
+  }
+
+  try {
+    // Get latest sleep
+    const sleepResponse = await whoopFetch<WhoopPaginatedResponse<WhoopSleep>>(
+      `/developer/v2/activity/sleep?limit=1`,
+      accessToken
+    )
+    const sleep = sleepResponse.records[0]
+    if (sleep) {
+      data.sleepHours = sleep.score.stage_summary.total_in_bed_time_milli / MILLIS_PER_HOUR
+    }
+  } catch (error) {
+    console.log('[AutoTrigger] Failed to fetch sleep:', error)
+  }
+
+  try {
+    // Get latest workout (check if it's from today)
+    const workoutResponse = await whoopFetch<WhoopPaginatedResponse<WhoopWorkout>>(
+      `/developer/v2/activity/workout?limit=1`,
+      accessToken
+    )
+    const workout = workoutResponse.records[0]
+    if (workout) {
+      // Only use workout type if the workout is from today
+      const workoutDate = new Date(workout.start)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      if (workoutDate >= today) {
+        data.workoutTypeId = workout.sport_id
+      }
+    }
+  } catch (error) {
+    console.log('[AutoTrigger] Failed to fetch workouts:', error)
+  }
+
+  return data
+}
+
 // ============ MAIN SYNC FUNCTION ============
 
 /**
@@ -286,7 +374,8 @@ async function getOrCreateWhoopActivity(
  * 5. Create ActivityCompletions for new data (source: WHOOP)
  * 6. Award XP to appropriate Habitanimals
  * 7. Update lastSync timestamp
- * 8. Return summary
+ * 8. Fetch LATEST Whoop data and evaluate auto-triggers
+ * 9. Return summary
  */
 export async function syncWhoopData(userId: string): Promise<SyncResult> {
   const result: SyncResult = {
@@ -297,6 +386,8 @@ export async function syncWhoopData(userId: string): Promise<SyncResult> {
       fitness: 0,
       total: 0,
     },
+    autoTriggersEvaluated: 0,
+    autoTriggersActivated: 0,
     errors: [],
   }
 
@@ -467,6 +558,43 @@ export async function syncWhoopData(userId: string): Promise<SyncResult> {
       lastSync: new Date(),
     },
   })
+
+  // 8. Fetch LATEST Whoop data and evaluate auto-triggers
+  // Important: We fetch the LATEST data here, not just what was in the sync window.
+  // This ensures triggers fire based on current values even if no new data was synced.
+  try {
+    const latestData = await fetchLatestWhoopData(accessToken)
+
+    console.log('[AutoTrigger] Latest Whoop data for triggers:', {
+      recovery: latestData.recovery,
+      sleepHours: latestData.sleepHours?.toFixed(1),
+      strain: latestData.strain?.toFixed(1),
+      workoutTypeId: latestData.workoutTypeId,
+    })
+
+    const triggerContext: TriggerContext = {
+      whoopRecovery: latestData.recovery,
+      whoopSleepHours: latestData.sleepHours,
+      whoopStrain: latestData.strain,
+      whoopWorkoutTypeId: latestData.workoutTypeId,
+    }
+
+    // Evaluate if we have any Whoop data
+    if (
+      latestData.recovery !== undefined ||
+      latestData.sleepHours !== undefined ||
+      latestData.strain !== undefined ||
+      latestData.workoutTypeId !== undefined
+    ) {
+      const triggerResults = await evaluateAutoTriggers(userId, triggerContext)
+      result.autoTriggersEvaluated = triggerResults.length
+      result.autoTriggersActivated = triggerResults.filter((r) => r.completionCreated).length
+    }
+  } catch (error) {
+    result.errors.push(
+      `Auto-trigger evaluation error: ${error instanceof Error ? error.message : 'Unknown error'}`
+    )
+  }
 
   return result
 }
