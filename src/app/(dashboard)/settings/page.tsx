@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/hooks/useAuth'
+import { TemplateManager } from '@/components/training'
 
 interface WhoopStatus {
   connected: boolean
@@ -484,6 +485,21 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+        </div>
+      </motion.section>
+
+      {/* Training Templates Section */}
+      <motion.section
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.35 }}
+      >
+        <div className="bg-surface/60 backdrop-blur-lg rounded-2xl border border-white/5 overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/5">
+            <h2 className="text-lg font-semibold text-text-primary">Training Templates</h2>
+            <p className="text-sm text-text-muted mt-1">Manage your saved workout templates</p>
+          </div>
+          <TemplateManager embedded />
         </div>
       </motion.section>
 

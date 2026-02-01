@@ -8,18 +8,18 @@ datasource db {
 }
 
 model Achievement {
-  id         String   @id
+  id         String   @id @default(cuid())
   type       String
   unlockedAt DateTime @default(now())
   userId     String
-  User       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, type])
   @@index([userId])
 }
 
 model Activity {
-  id                                                  String               @id
+  id                                                  String               @id @default(cuid())
   name                                                String
   pillar                                              Pillar
   subCategory                                         String
@@ -30,13 +30,14 @@ model Activity {
   cueType                                             CueType?
   cueValue                                            String?
   createdAt                                           DateTime             @default(now())
-  updatedAt                                           DateTime
+  updatedAt                                           DateTime             @updatedAt
   archived                                            Boolean              @default(false)
   userId                                              String
-  User                                                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  ActivityCompletion                                  ActivityCompletion[]
-  AutoTrigger_AutoTrigger_activityIdToActivity        AutoTrigger?         @relation("AutoTrigger_activityIdToActivity")
-  AutoTrigger_AutoTrigger_triggerActivityIdToActivity AutoTrigger[]        @relation("AutoTrigger_triggerActivityIdToActivity")
+  user                                                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  completions                                         ActivityCompletion[]
+  autoTrigger                                         AutoTrigger?         @relation("AutoTrigger_activityIdToActivity")
+  triggeredBy                                         AutoTrigger[]        @relation("AutoTrigger_triggerActivityIdToActivity")
+  trainingTemplate                                    TrainingTemplate?
 
   @@index([pillar])
   @@index([subCategory])
@@ -44,52 +45,53 @@ model Activity {
 }
 
 model ActivityCompletion {
-  id           String   @id
-  completedAt  DateTime @default(now())
-  pointsEarned Int
-  details      String?
-  source       Source   @default(MANUAL)
-  activityId   String
-  Activity     Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  id              String           @id @default(cuid())
+  completedAt     DateTime         @default(now())
+  pointsEarned    Int
+  details         String?
+  source          Source           @default(MANUAL)
+  activityId      String
+  activity        Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  trainingDetails TrainingDetails?
 
   @@index([activityId])
   @@index([completedAt])
 }
 
 model AutoTrigger {
-  id                                               String          @id
-  activityId                                       String          @unique
-  triggerType                                      AutoTriggerType
-  thresholdValue                                   Float?
-  workoutTypeId                                    Int?
-  triggerActivityId                                String?
-  isActive                                         Boolean         @default(true)
-  createdAt                                        DateTime        @default(now())
-  updatedAt                                        DateTime
-  Activity_AutoTrigger_activityIdToActivity        Activity        @relation("AutoTrigger_activityIdToActivity", fields: [activityId], references: [id], onDelete: Cascade)
-  Activity_AutoTrigger_triggerActivityIdToActivity Activity?       @relation("AutoTrigger_triggerActivityIdToActivity", fields: [triggerActivityId], references: [id])
+  id                String          @id @default(cuid())
+  activityId        String          @unique
+  triggerType       AutoTriggerType
+  thresholdValue    Float?
+  workoutTypeId     Int?
+  triggerActivityId String?
+  isActive          Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  activity          Activity        @relation("AutoTrigger_activityIdToActivity", fields: [activityId], references: [id], onDelete: Cascade)
+  triggerActivity   Activity?       @relation("AutoTrigger_triggerActivityIdToActivity", fields: [triggerActivityId], references: [id])
 
   @@index([activityId])
   @@index([triggerType])
 }
 
 model CustomSubcategory {
-  id        String   @id
+  id        String   @id @default(cuid())
   userId    String
   pillar    Pillar
   name      String
   key       String
   color     String?
   createdAt DateTime @default(now())
-  updatedAt DateTime
-  User      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, pillar, key])
   @@index([userId])
 }
 
 model DailyGoal {
-  id             String   @id
+  id             String   @id @default(cuid())
   userId         String
   date           DateTime @db.Date
   bodyCompleted  Boolean  @default(false)
@@ -97,15 +99,15 @@ model DailyGoal {
   bodyActivities String[]
   mindActivities String[]
   createdAt      DateTime @default(now())
-  updatedAt      DateTime
-  User           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
   @@index([userId])
 }
 
 model DailyScore {
-  id              String   @id
+  id              String   @id @default(cuid())
   date            DateTime @db.Date
   bodyScore       Int
   mindScore       Int
@@ -120,13 +122,13 @@ model DailyScore {
   whoopSleep      Float?
   whoopRecovery   Float?
   createdAt       DateTime @default(now())
-  updatedAt       DateTime
+  updatedAt       DateTime @updatedAt
   userId          String
   bodyComplete    Boolean  @default(false)
   bodyPoints      Int      @default(0)
   mindComplete    Boolean  @default(false)
   mindPoints      Int      @default(0)
-  User            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
   @@index([date])
@@ -134,27 +136,27 @@ model DailyScore {
 }
 
 model HabitStack {
-  id              String            @id
-  userId          String
-  name            String
-  description     String?
-  cueType         CueType?
-  cueValue        String?
-  isPreset        Boolean           @default(false)
-  presetKey       String?
-  isActive        Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime
-  completionBonus Int               @default(20)
-  activityIds     String[]
-  User            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  StackCompletion StackCompletion[]
+  id               String            @id @default(cuid())
+  userId           String
+  name             String
+  description      String?
+  cueType          CueType?
+  cueValue         String?
+  isPreset         Boolean           @default(false)
+  presetKey        String?
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  completionBonus  Int               @default(20)
+  activityIds      String[]
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stackCompletions StackCompletion[]
 
   @@index([userId])
 }
 
 model Habitanimal {
-  id              String          @id
+  id              String          @id @default(cuid())
   type            HabitanimalType
   species         String
   name            String
@@ -164,15 +166,15 @@ model Habitanimal {
   evolutionStage  Int             @default(1)
   lastInteraction DateTime        @default(now())
   createdAt       DateTime        @default(now())
-  updatedAt       DateTime
+  updatedAt       DateTime        @updatedAt
   userId          String
-  User            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model Quote {
-  id        String        @id
+  id        String        @id @default(cuid())
   text      String
   author    String?
   category  QuoteCategory
@@ -183,13 +185,13 @@ model Quote {
 }
 
 model StackCompletion {
-  id                String     @id
+  id                String     @id @default(cuid())
   stackId           String
   date              DateTime   @db.Date
   completedAt       DateTime   @default(now())
   bonusPointsEarned Int        @default(0)
   streakDay         Int        @default(1)
-  HabitStack        HabitStack @relation(fields: [stackId], references: [id], onDelete: Cascade)
+  habitStack        HabitStack @relation(fields: [stackId], references: [id], onDelete: Cascade)
 
   @@unique([stackId, date])
   @@index([date])
@@ -197,41 +199,41 @@ model StackCompletion {
 }
 
 model Streak {
-  id             String    @id
+  id             String    @id @default(cuid())
   current        Int       @default(0)
   longest        Int       @default(0)
   lastActiveDate DateTime?
   createdAt      DateTime  @default(now())
-  updatedAt      DateTime
+  updatedAt      DateTime  @updatedAt
   userId         String
   pillarKey      String
-  User           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, pillarKey])
   @@index([userId])
 }
 
 model User {
-  id                String              @id
-  email             String              @unique
-  passwordHash      String
-  name              String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime
-  Achievement       Achievement[]
-  Activity          Activity[]
-  CustomSubcategory CustomSubcategory[]
-  DailyGoal         DailyGoal[]
-  DailyScore        DailyScore[]
-  HabitStack        HabitStack[]
-  Habitanimal       Habitanimal[]
-  Streak            Streak[]
-  WeightConfig      WeightConfig?
-  WhoopConnection   WhoopConnection?
+  id                  String              @id @default(cuid())
+  email               String              @unique
+  passwordHash        String
+  name                String?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  achievements        Achievement[]
+  activities          Activity[]
+  customSubcategories CustomSubcategory[]
+  dailyGoals          DailyGoal[]
+  dailyScores         DailyScore[]
+  habitStacks         HabitStack[]
+  habitanimals        Habitanimal[]
+  streaks             Streak[]
+  weightConfig        WeightConfig?
+  whoopConnection     WhoopConnection?
 }
 
 model WeightConfig {
-  id               String       @id
+  id               String       @id @default(cuid())
   userId           String       @unique
   preset           WeightPreset @default(BALANCED)
   trainingWeight   Int          @default(35)
@@ -241,20 +243,81 @@ model WeightConfig {
   readingWeight    Int          @default(30)
   learningWeight   Int          @default(30)
   createdAt        DateTime     @default(now())
-  updatedAt        DateTime
-  User             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt        DateTime     @updatedAt
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model WhoopConnection {
-  id           String    @id
+  id           String    @id @default(cuid())
   accessToken  String
   refreshToken String
   expiresAt    DateTime
   lastSync     DateTime?
   createdAt    DateTime  @default(now())
-  updatedAt    DateTime
+  updatedAt    DateTime  @updatedAt
   userId       String    @unique
-  User         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Training template defaults (linked to Activity for recurring workouts)
+model TrainingTemplate {
+  id               String            @id @default(cuid())
+  activityId       String            @unique
+  activity         Activity          @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  workoutType      WorkoutType?
+  durationMinutes  Int?
+  intensity        Intensity?
+  muscleGroups     MuscleGroup[]
+  location         TrainingLocation?
+  defaultExercises Json?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([activityId])
+}
+
+// Training details for individual workout completions
+model TrainingDetails {
+  id                   String             @id @default(cuid())
+  activityCompletionId String             @unique
+  activityCompletion   ActivityCompletion @relation(fields: [activityCompletionId], references: [id], onDelete: Cascade)
+  workoutType          WorkoutType?
+  durationMinutes      Int?
+  intensity            Intensity?
+  muscleGroups         MuscleGroup[]
+  location             TrainingLocation?
+  rpe                  Int?
+  avgHeartRate         Int?
+  maxHeartRate         Int?
+  hrZones              Json?
+  calories             Int?
+  distance             Float?
+  source               Source?
+  externalWorkoutId    String?
+  externalData         Json?
+  exercises            Exercise[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([activityCompletionId])
+  @@index([source])
+  @@index([externalWorkoutId])
+}
+
+// Individual exercises within a workout
+model Exercise {
+  id                String          @id @default(cuid())
+  trainingDetailsId String
+  trainingDetails   TrainingDetails @relation(fields: [trainingDetailsId], references: [id], onDelete: Cascade)
+  name              String
+  sets              Int?
+  reps              String?
+  weight            Float?
+  notes             String?
+  order             Int             @default(0)
+  createdAt         DateTime        @default(now())
+
+  @@index([trainingDetailsId])
 }
 
 enum AutoTriggerType {
@@ -312,7 +375,42 @@ enum Source {
   MANUAL
   WHOOP
   APPLE_HEALTH
+  GARMIN
+  STRAVA
+  FITBIT
   AUTO_TRIGGER
+}
+
+enum WorkoutType {
+  STRENGTH
+  CARDIO
+  HIIT
+  YOGA
+  SPORTS
+  WALK
+  STRETCH
+  OTHER
+}
+
+enum Intensity {
+  LIGHT
+  MODERATE
+  HARD
+  MAX
+}
+
+enum MuscleGroup {
+  UPPER
+  LOWER
+  CORE
+  FULL_BODY
+}
+
+enum TrainingLocation {
+  GYM
+  HOME
+  OUTDOOR
+  OTHER
 }
 
 enum WeightPreset {

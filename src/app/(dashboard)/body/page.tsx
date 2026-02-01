@@ -17,6 +17,7 @@ import {
 import type { CustomSubcategory } from '@/components/subcategories';
 import { QuickLogChips, ActivityDetailModal } from '@/components/activities';
 import { ActivityLogModal } from '@/components/activities/ActivityLogModal';
+import { TrainingLogModal } from '@/components/training';
 import { PREDEFINED_SUBCATEGORIES, getSubcategoryConfig, getSubcategoriesForPillar } from '@/lib/subcategories';
 import { POINTS_THRESHOLD } from '@/lib/points';
 import { useAuth } from '@/hooks/useAuth';
@@ -650,17 +651,29 @@ export default function BodyPage() {
         </AnimatePresence>
       </motion.section>
 
-      {/* Activity Log Modal */}
-      <ActivityLogModal
-        isOpen={showActivityModal}
-        onClose={() => setShowActivityModal(false)}
-        onLogged={() => {
-          setShowActivityModal(false);
-          fetchData();
-          setNotification({ type: 'success', message: 'Activity logged!' });
-        }}
-        pillar="BODY"
-      />
+      {/* Activity Log Modal - Use TrainingLogModal for TRAINING category */}
+      {selectedCategory === 'TRAINING' ? (
+        <TrainingLogModal
+          isOpen={showActivityModal}
+          onClose={() => setShowActivityModal(false)}
+          onLogged={() => {
+            setShowActivityModal(false);
+            fetchData();
+            setNotification({ type: 'success', message: 'Training logged!' });
+          }}
+        />
+      ) : (
+        <ActivityLogModal
+          isOpen={showActivityModal}
+          onClose={() => setShowActivityModal(false)}
+          onLogged={() => {
+            setShowActivityModal(false);
+            fetchData();
+            setNotification({ type: 'success', message: 'Activity logged!' });
+          }}
+          pillar="BODY"
+        />
+      )}
 
       {/* Activity Detail Modal (Edit/Delete) */}
       <ActivityDetailModal
