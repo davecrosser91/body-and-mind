@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { isPillarComplete } from './points';
 
 // Pillar keys for streaks
 export type PillarKey = 'BODY' | 'MIND' | 'OVERALL';
@@ -34,9 +35,128 @@ function getHoursRemainingToday(): number {
 }
 
 /**
- * Check if a day is complete for a given pillar based on habit completions
- * For OVERALL, both Body AND Mind must have at least 1 completion
- * Uses count queries for better performance
+ * Update streaks for a specific date based on activity completions
+ * Uses points-based completion (100 pts = streak maintained)
+ */
+export async function updateStreaksForDate(userId: string, date: Date) {
+  // Get or calculate daily score
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  // Get all completions for the day
+  const completions = await prisma.activityCompletion.findMany({
+    where: {
+      activity: { userId },
+      completedAt: { gte: startOfDay, lte: endOfDay },
+    },
+    include: { activity: true },
+  });
+
+  // Calculate points per pillar
+  const bodyPoints = completions
+    .filter(c => c.activity.pillar === 'BODY')
+    .reduce((sum, c) => sum + c.pointsEarned, 0);
+
+  const mindPoints = completions
+    .filter(c => c.activity.pillar === 'MIND')
+    .reduce((sum, c) => sum + c.pointsEarned, 0);
+
+  const bodyComplete = isPillarComplete(bodyPoints);
+  const mindComplete = isPillarComplete(mindPoints);
+
+  // Update or create DailyScore
+  await prisma.dailyScore.upsert({
+    where: { userId_date: { userId, date: startOfDay } },
+    create: {
+      userId,
+      date: startOfDay,
+      bodyScore: Math.min(bodyPoints, 100),
+      mindScore: Math.min(mindPoints, 100),
+      balanceIndex: Math.round((Math.min(bodyPoints, 100) + Math.min(mindPoints, 100)) / 2),
+      bodyPoints,
+      mindPoints,
+      bodyComplete,
+      mindComplete,
+    },
+    update: {
+      bodyScore: Math.min(bodyPoints, 100),
+      mindScore: Math.min(mindPoints, 100),
+      balanceIndex: Math.round((Math.min(bodyPoints, 100) + Math.min(mindPoints, 100)) / 2),
+      bodyPoints,
+      mindPoints,
+      bodyComplete,
+      mindComplete,
+    },
+  });
+
+  // Update streaks
+  await updatePillarStreak(userId, 'BODY', bodyComplete, startOfDay);
+  await updatePillarStreak(userId, 'MIND', mindComplete, startOfDay);
+  await updatePillarStreak(userId, 'OVERALL', bodyComplete && mindComplete, startOfDay);
+}
+
+async function updatePillarStreak(
+  userId: string,
+  pillarKey: string,
+  complete: boolean,
+  date: Date
+) {
+  const streak = await prisma.streak.upsert({
+    where: { userId_pillarKey: { userId, pillarKey } },
+    create: { userId, pillarKey, current: 0, longest: 0 },
+    update: {},
+  });
+
+  const yesterday = new Date(date);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (complete) {
+    // Check if continuing streak from yesterday
+    const wasActiveYesterday = streak.lastActiveDate &&
+      streak.lastActiveDate.getTime() >= yesterday.setHours(0, 0, 0, 0);
+
+    const newCurrent = wasActiveYesterday ? streak.current + 1 : 1;
+
+    await prisma.streak.update({
+      where: { id: streak.id },
+      data: {
+        current: newCurrent,
+        longest: Math.max(streak.longest, newCurrent),
+        lastActiveDate: date,
+      },
+    });
+  } else if (streak.lastActiveDate && streak.lastActiveDate < yesterday) {
+    // Missed yesterday, reset streak
+    await prisma.streak.update({
+      where: { id: streak.id },
+      data: { current: 0 },
+    });
+  }
+}
+
+/**
+ * Get streaks for a user (simple format)
+ */
+export async function getStreaks(userId: string) {
+  const streaks = await prisma.streak.findMany({
+    where: { userId },
+  });
+
+  return {
+    body: streaks.find(s => s.pillarKey === 'BODY')?.current ?? 0,
+    mind: streaks.find(s => s.pillarKey === 'MIND')?.current ?? 0,
+    overall: streaks.find(s => s.pillarKey === 'OVERALL')?.current ?? 0,
+    bodyLongest: streaks.find(s => s.pillarKey === 'BODY')?.longest ?? 0,
+    mindLongest: streaks.find(s => s.pillarKey === 'MIND')?.longest ?? 0,
+    overallLongest: streaks.find(s => s.pillarKey === 'OVERALL')?.longest ?? 0,
+  };
+}
+
+/**
+ * Check if a day is complete for a given pillar based on points
+ * For OVERALL, both Body AND Mind must have >= 100 points
  */
 export async function isDayComplete(
   userId: string,
@@ -45,79 +165,34 @@ export async function isDayComplete(
 ): Promise<boolean> {
   const dayStart = new Date(date);
   dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart);
-  dayEnd.setDate(dayEnd.getDate() + 1);
+  const dayEnd = new Date(date);
+  dayEnd.setHours(23, 59, 59, 999);
+
+  // Get completions for the day
+  const completions = await prisma.activityCompletion.findMany({
+    where: {
+      activity: { userId, archived: false },
+      completedAt: { gte: dayStart, lte: dayEnd },
+    },
+    include: { activity: { select: { pillar: true } } },
+  });
 
   if (pillarKey === 'BODY' || pillarKey === 'MIND') {
-    // For single pillar, use count query
-    const count = await prisma.habitCompletion.count({
-      where: {
-        habit: { userId, pillar: pillarKey, archived: false },
-        completedAt: { gte: dayStart, lt: dayEnd },
-      },
-    });
-    return count > 0;
+    const points = completions
+      .filter(c => c.activity.pillar === pillarKey)
+      .reduce((sum, c) => sum + c.pointsEarned, 0);
+    return isPillarComplete(points);
   }
 
-  // For OVERALL, both Body AND Mind must have at least 1 completion
-  const [bodyCount, mindCount] = await Promise.all([
-    prisma.habitCompletion.count({
-      where: {
-        habit: { userId, pillar: 'BODY', archived: false },
-        completedAt: { gte: dayStart, lt: dayEnd },
-      },
-    }),
-    prisma.habitCompletion.count({
-      where: {
-        habit: { userId, pillar: 'MIND', archived: false },
-        completedAt: { gte: dayStart, lt: dayEnd },
-      },
-    }),
-  ]);
+  // For OVERALL, both Body AND Mind must have >= 100 points
+  const bodyPoints = completions
+    .filter(c => c.activity.pillar === 'BODY')
+    .reduce((sum, c) => sum + c.pointsEarned, 0);
+  const mindPoints = completions
+    .filter(c => c.activity.pillar === 'MIND')
+    .reduce((sum, c) => sum + c.pointsEarned, 0);
 
-  return bodyCount > 0 && mindCount > 0;
-}
-
-/**
- * Internal function to get raw streak data from database
- */
-async function getRawStreak(
-  userId: string,
-  pillarKey: PillarKey
-): Promise<{ current: number; longest: number; lastActiveDate: Date | null }> {
-  const existing = await prisma.streak.findUnique({
-    where: {
-      userId_pillarKey: {
-        userId,
-        pillarKey,
-      },
-    },
-  });
-
-  if (existing) {
-    return {
-      current: existing.current,
-      longest: existing.longest,
-      lastActiveDate: existing.lastActiveDate,
-    };
-  }
-
-  // Create new streak record
-  const created = await prisma.streak.create({
-    data: {
-      userId,
-      pillarKey,
-      current: 0,
-      longest: 0,
-      lastActiveDate: null,
-    },
-  });
-
-  return {
-    current: created.current,
-    longest: created.longest,
-    lastActiveDate: created.lastActiveDate,
-  };
+  return isPillarComplete(bodyPoints) && isPillarComplete(mindPoints);
 }
 
 /**
@@ -127,18 +202,25 @@ export async function getStreak(
   userId: string,
   pillarKey: PillarKey = 'OVERALL'
 ): Promise<StreakInfo> {
-  const rawStreak = await getRawStreak(userId, pillarKey);
+  const streak = await prisma.streak.findUnique({
+    where: { userId_pillarKey: { userId, pillarKey } },
+  });
+
+  const current = streak?.current ?? 0;
+  const longest = streak?.longest ?? 0;
+  const lastActiveDate = streak?.lastActiveDate ?? null;
+
   const todayComplete = await isDayComplete(userId, new Date(), pillarKey);
   const hoursRemaining = getHoursRemainingToday();
 
   // At risk if: current streak > 0 AND today not complete
-  const atRisk = rawStreak.current > 0 && !todayComplete;
+  const atRisk = current > 0 && !todayComplete;
 
   return {
-    current: rawStreak.current,
-    longest: rawStreak.longest,
-    lastActiveDate: rawStreak.lastActiveDate
-      ? rawStreak.lastActiveDate.toISOString().split('T')[0] as string
+    current,
+    longest,
+    lastActiveDate: lastActiveDate
+      ? lastActiveDate.toISOString().split('T')[0] as string
       : null,
     atRisk,
     hoursRemaining,
@@ -146,202 +228,30 @@ export async function getStreak(
 }
 
 /**
- * Get or create streak record (returns enhanced StreakInfo with atRisk and hoursRemaining)
+ * Get all streaks for a user (detailed format with atRisk info)
  */
-async function getOrCreateStreak(
-  userId: string,
-  pillarKey: PillarKey
-): Promise<StreakInfo> {
-  // Use the new getStreak function which includes atRisk and hoursRemaining
-  return getStreak(userId, pillarKey);
+export async function getAllStreaks(userId: string): Promise<AllStreaks> {
+  const [overall, body, mind] = await Promise.all([
+    getStreak(userId, 'OVERALL'),
+    getStreak(userId, 'BODY'),
+    getStreak(userId, 'MIND'),
+  ]);
+
+  return { overall, body, mind };
 }
 
 /**
- * Update streak after completing a day
- * Updates the streak in the database and returns the enhanced StreakInfo
- * Wrapped in a transaction to prevent race conditions
- */
-export async function updateStreak(
-  userId: string,
-  pillarKey: PillarKey,
-  date: Date
-): Promise<StreakInfo> {
-  const dateOnly = new Date(date);
-  dateOnly.setHours(0, 0, 0, 0);
-  const hoursRemaining = getHoursRemainingToday();
-
-  // Check if active today using habit completions (outside transaction for read)
-  const isActive = await isDayComplete(userId, date, pillarKey);
-
-  // Use transaction for the read-check-update sequence
-  const result = await prisma.$transaction(async (tx) => {
-    // Get or create streak within transaction
-    let rawStreak = await tx.streak.findUnique({
-      where: {
-        userId_pillarKey: {
-          userId,
-          pillarKey,
-        },
-      },
-    });
-
-    if (!rawStreak) {
-      rawStreak = await tx.streak.create({
-        data: {
-          userId,
-          pillarKey,
-          current: 0,
-          longest: 0,
-          lastActiveDate: null,
-        },
-      });
-    }
-
-    // If already updated today, return current streak info
-    if (rawStreak.lastActiveDate) {
-      const lastDate = new Date(rawStreak.lastActiveDate);
-      lastDate.setHours(0, 0, 0, 0);
-
-      if (lastDate.getTime() === dateOnly.getTime()) {
-        return {
-          current: rawStreak.current,
-          longest: rawStreak.longest,
-          lastActiveDate: rawStreak.lastActiveDate,
-          updated: false,
-        };
-      }
-    }
-
-    if (!isActive) {
-      // Check if we broke the streak (missed yesterday)
-      if (rawStreak.lastActiveDate) {
-        const lastDate = new Date(rawStreak.lastActiveDate);
-        lastDate.setHours(0, 0, 0, 0);
-
-        const daysSinceActive = Math.floor(
-          (dateOnly.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)
-        );
-
-        if (daysSinceActive > 1) {
-          // Streak broken - reset to 0
-          const updated = await tx.streak.update({
-            where: {
-              userId_pillarKey: { userId, pillarKey },
-            },
-            data: {
-              current: 0,
-            },
-          });
-
-          return {
-            current: updated.current,
-            longest: updated.longest,
-            lastActiveDate: updated.lastActiveDate,
-            updated: true,
-            streakBroken: true,
-          };
-        }
-      }
-
-      // Not active today but streak not broken yet (yesterday was active)
-      return {
-        current: rawStreak.current,
-        longest: rawStreak.longest,
-        lastActiveDate: rawStreak.lastActiveDate,
-        updated: false,
-      };
-    }
-
-    // Active today - update streak
-    let newCurrent = 1;
-
-    if (rawStreak.lastActiveDate) {
-      const lastDate = new Date(rawStreak.lastActiveDate);
-      lastDate.setHours(0, 0, 0, 0);
-
-      const daysSinceActive = Math.floor(
-        (dateOnly.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
-      if (daysSinceActive === 1) {
-        // Consecutive day - increment
-        newCurrent = rawStreak.current + 1;
-      } else if (daysSinceActive === 0) {
-        // Same day - keep current
-        newCurrent = rawStreak.current;
-      }
-      // If daysSinceActive > 1, streak was broken, start at 1
-    }
-
-    const newLongest = Math.max(rawStreak.longest, newCurrent);
-
-    const updated = await tx.streak.update({
-      where: {
-        userId_pillarKey: { userId, pillarKey },
-      },
-      data: {
-        current: newCurrent,
-        longest: newLongest,
-        lastActiveDate: dateOnly,
-      },
-    });
-
-    return {
-      current: updated.current,
-      longest: updated.longest,
-      lastActiveDate: updated.lastActiveDate,
-      updated: true,
-      newCurrent,
-    };
-  });
-
-  // Check for streak achievements outside transaction
-  if (result.updated && result.newCurrent) {
-    await checkStreakAchievements(userId, result.newCurrent);
-  }
-
-  // Determine atRisk status
-  const todayComplete = isActive || (await isDayComplete(userId, new Date(), pillarKey));
-  const atRisk = result.current > 0 && !todayComplete;
-
-  return {
-    current: result.current,
-    longest: result.longest,
-    lastActiveDate: result.lastActiveDate
-      ? result.lastActiveDate.toISOString().split('T')[0] as string
-      : null,
-    atRisk,
-    hoursRemaining,
-  };
-}
-
-/**
- * Update all streaks (overall, body, mind)
+ * Update all streaks (overall, body, mind) for current date
  */
 export async function updateAllStreaks(
   userId: string,
   date: Date
 ): Promise<AllStreaks> {
-  const [overall, body, mind] = await Promise.all([
-    updateStreak(userId, 'OVERALL', date),
-    updateStreak(userId, 'BODY', date),
-    updateStreak(userId, 'MIND', date),
-  ]);
+  // Update streaks for the date
+  await updateStreaksForDate(userId, date);
 
-  return { overall, body, mind };
-}
-
-/**
- * Get all streaks for a user
- */
-export async function getAllStreaks(userId: string): Promise<AllStreaks> {
-  const [overall, body, mind] = await Promise.all([
-    getOrCreateStreak(userId, 'OVERALL'),
-    getOrCreateStreak(userId, 'BODY'),
-    getOrCreateStreak(userId, 'MIND'),
-  ]);
-
-  return { overall, body, mind };
+  // Return the updated streaks
+  return getAllStreaks(userId);
 }
 
 /**
@@ -367,7 +277,7 @@ const STREAK_MILESTONES = [3, 7, 14, 30, 60, 100, 365];
 /**
  * Check and unlock streak achievements
  */
-async function checkStreakAchievements(
+export async function checkStreakAchievements(
   userId: string,
   streakDays: number
 ): Promise<string[]> {

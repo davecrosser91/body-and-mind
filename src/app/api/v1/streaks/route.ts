@@ -9,8 +9,9 @@ import { getAllStreaks, AllStreaks } from '@/lib/streaks';
  * Returns streak information for all three pillar types (OVERALL, BODY, MIND)
  * for the authenticated user.
  *
- * The OVERALL streak requires BOTH Body AND Mind to have at least one completion
- * each day to maintain the streak. Missing either pillar resets the overall streak.
+ * Streaks are maintained using points-based completion: 100 points per pillar
+ * is required to maintain a streak. The OVERALL streak requires BOTH Body AND
+ * Mind to have >= 100 points each day to maintain the streak.
  *
  * @returns {Object} response
  * @returns {boolean} response.success - Always true on success

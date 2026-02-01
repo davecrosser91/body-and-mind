@@ -10,7 +10,7 @@ import { calculateHabitXP, calculateLevel, calculateEvolutionStage } from '@/lib
 import { recoverHealth } from '@/lib/habitanimal-health'
 import { HabitCompletion, Habitanimal, Habit, Pillar, SubCategory, Category, Source, Frequency } from '@prisma/client'
 import { updateDailyGoal } from '@/lib/daily-status'
-import { updateStreak } from '@/lib/streaks'
+import { updateStreaksForDate } from '@/lib/streaks'
 
 // Types
 
@@ -564,8 +564,7 @@ export async function logActivity(
 
   // 8. Update streak (async, non-blocking)
   try {
-    await updateStreak(userId, pillar, new Date())
-    await updateStreak(userId, 'OVERALL', new Date())
+    await updateStreaksForDate(userId, new Date())
   } catch (error) {
     console.error('Failed to update streak:', error)
     // Non-critical, continue
