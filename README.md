@@ -1,57 +1,178 @@
 # Body & Mind
 
-A minimalist habit-tracking app built on one simple principle: **do at least one thing for your body and one thing for your mind each day.**
+A gamified habit-tracking app built on one simple principle: **reach 100 points for your body and 100 points for your mind each day.**
 
 > "Self-care is not selfish. You cannot serve from an empty vessel."
 > — Eleanor Brown
 
+## Table of Contents
+
+- [Philosophy](#philosophy)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [Development](#development)
+- [API Documentation](#api-documentation)
+- [Architecture Highlights](#architecture-highlights)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
 ## Philosophy
 
-Most habit apps overwhelm you with streaks, goals, and guilt. Body & Mind takes a different approach:
+Most habit apps overwhelm you with endless streaks, unforgiving goals, and guilt. Body & Mind takes a different approach:
 
-- **Two Pillars**: Body (Training, Sleep, Nutrition) and Mind (Meditation, Reading, Learning, Journaling)
-- **One Simple Goal**: Complete at least one activity from each pillar daily
-- **Habit Stacking**: Chain activities together for bonus points and momentum
-- **Streaks That Forgive**: Build consistency without the anxiety of losing everything
+| Principle | Description |
+|-----------|-------------|
+| **Two Pillars** | Body (Training, Sleep, Nutrition) and Mind (Meditation, Reading, Learning, Journaling) |
+| **Points Over Checkboxes** | 100 points per pillar = daily completion. Mix and match activities to hit your target. |
+| **Habit Stacking** | Chain activities together for bonus points and momentum |
+| **Streaks That Reward** | Progressive multipliers (+5% per day, up to 50%) without punishing missed days |
+
+---
 
 ## Features
 
-- **Daily Balance** - Track your Body & Mind scores with a simple, visual dashboard
-- **Habit Stacking** - Chain habits together into powerful routines with completion bonuses
-- **Streak System** - Progressive multipliers reward consistency (+5% per day, max 50%)
-- **Whoop Integration** - Auto-sync sleep and workout data (optional)
-- **Dark Mode** - Easy on the eyes, beautiful to use
+### Core
+- **Daily Balance Dashboard** - Visual score rings showing Body & Mind progress toward 100 points
+- **Flexible Activities** - Create custom activities with configurable point values (default: 25 pts)
+- **Habit Stacking** - Chain 2+ habits into routines with completion bonuses (up to +100%)
+- **Streak System** - Build momentum with daily multipliers that compound your points
+
+### Integrations
+- **Whoop Sync** - Auto-import recovery scores, sleep data, and workouts via OAuth
+- **Auto-Triggers** - Automatically complete habits based on Whoop metrics (e.g., "Log sleep if hours > 7")
+
+### Experience
+- **Premium Dark UI** - Minimalist design with smooth Framer Motion animations
+- **Personalized Recommendations** - Suggestions based on recovery status and streak urgency
+- **Subcategory Dashboards** - Drill into Training, Sleep, Meditation, and more
+
+---
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14, React 18, TailwindCSS 4, Framer Motion
-- **Backend**: Next.js API Routes, Prisma ORM
-- **Database**: PostgreSQL
-- **Auth**: JWT-based authentication
+| Layer | Technologies |
+|-------|--------------|
+| **Frontend** | Next.js 14, React 18, TypeScript, TailwindCSS 4, Framer Motion |
+| **Backend** | Next.js API Routes, Prisma ORM |
+| **Database** | PostgreSQL |
+| **Auth** | NextAuth.js with JWT (7-day tokens, bcrypt hashing) |
+| **Integrations** | Whoop API (OAuth 2.0) |
+| **Testing** | Vitest (unit), Playwright (E2E) |
+
+---
 
 ## Getting Started
 
+### Prerequisites
+- Node.js 18+
+- PostgreSQL (or use Docker)
+- (Optional) Whoop developer account for integration
+
+### Quick Start
+
 ```bash
-# Install dependencies
+# Clone and install
+git clone https://github.com/yourusername/routine-game.git
+cd routine-game
 npm install
 
 # Setup environment
 cp .env.example .env.local
-# Edit .env.local with your DATABASE_URL
+# Edit .env.local with your credentials (see Environment Variables below)
 
-# Generate Prisma client
+# Start PostgreSQL (if using Docker)
+docker-compose up -d
+
+# Setup database
 npx prisma generate
-
-# Run database migrations
 npx prisma migrate dev
 
 # Start development server
 npm run dev
 ```
 
+Visit `http://localhost:3000` to see the app.
+
+### Environment Variables
+
+Create a `.env.local` file with the following:
+
+```bash
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5433/habit_animals"
+
+# Auth
+NEXTAUTH_SECRET="your-secret-key-here"
+NEXTAUTH_URL="http://localhost:3000"
+
+# Whoop Integration (optional)
+WHOOP_CLIENT_ID="your-whoop-client-id"
+WHOOP_CLIENT_SECRET="your-whoop-client-secret"
+```
+
+---
+
+## Development
+
+### Available Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server |
+| `npm run build` | Build for production |
+| `npm run start` | Start production server |
+| `npm run lint` | Run ESLint |
+| `npm run format` | Format with Prettier |
+| `npm run test` | Run Vitest unit tests |
+| `npm run test:e2e` | Run Playwright E2E tests |
+| `npm run db:generate` | Regenerate Prisma client |
+| `npm run db:push` | Push schema to database |
+| `npm run db:migrate` | Run database migrations |
+| `npm run db:studio` | Open Prisma Studio GUI |
+
+### Project Structure
+
+```
+src/
+├── app/                    # Next.js app directory
+│   ├── (auth)/            # Auth pages (login, signup, onboarding)
+│   ├── (dashboard)/       # Main app pages
+│   │   ├── dashboard/     # Home dashboard
+│   │   ├── body/          # Body pillar page
+│   │   ├── mind/          # Mind pillar page
+│   │   ├── stacks/        # Habit stack management
+│   │   ├── insights/      # Analytics & history
+│   │   └── settings/      # User settings
+│   └── api/v1/            # REST API endpoints
+├── components/            # React components (57+)
+│   ├── activities/        # Activity logging
+│   ├── dashboard/         # Dashboard sections
+│   ├── scores/            # Score rings & breakdowns
+│   ├── stacks/            # Stack cards & chains
+│   ├── whoop/             # Whoop integration UI
+│   └── ui/                # Shared UI components
+├── lib/                   # Business logic
+│   ├── auth.ts           # JWT handling
+│   ├── points.ts         # Points calculation
+│   ├── streaks.ts        # Streak logic
+│   ├── habit-stacks.ts   # Stack operations
+│   ├── auto-trigger.ts   # Auto-completion rules
+│   └── whoop-sync.ts     # Whoop data sync
+├── contexts/              # React contexts (Auth, Toast)
+├── hooks/                 # Custom hooks (useAuth, useDashboard)
+└── types/                 # TypeScript definitions
+```
+
+---
+
 ## API Documentation
 
 All API endpoints are prefixed with `/api/v1`. Authentication is required for most endpoints via Bearer token in the `Authorization` header.
+
+> **Interactive Docs**: Visit `/docs` when running the dev server for Swagger UI exploration.
 
 ### Response Format
 
@@ -73,6 +194,17 @@ All responses follow a standard format:
   }
 }
 ```
+
+### Endpoints Overview
+
+| Category | Endpoints | Description |
+|----------|-----------|-------------|
+| **Auth** | `/auth/signup`, `/auth/login`, `/auth/me` | User registration and authentication |
+| **Activities** | `/activities`, `/activities/:id/complete` | CRUD operations and completions |
+| **Stacks** | `/stacks`, `/stacks/:id/execute` | Habit stack management |
+| **Status** | `/daily-status`, `/streaks` | Daily progress and streak data |
+| **Whoop** | `/integrations/whoop/*` | OAuth connection and sync |
+| **Other** | `/recommendations`, `/weights`, `/health` | Personalization and system |
 
 ---
 
@@ -411,10 +543,49 @@ Health check endpoint (no auth required).
 
 ---
 
-## Interactive API Docs
+## Architecture Highlights
 
-Swagger UI is available at `/docs` when running the dev server for interactive API exploration.
+### Points System
+- **100 points** per pillar (Body/Mind) = daily completion
+- Default activity value: **25 points** (4 activities to complete a pillar)
+- Streak maintained only when **both pillars** reach 100 points
+
+### Streak Multipliers
+| Days | Bonus |
+|------|-------|
+| 1 | +5% |
+| 5 | +25% |
+| 10+ | +50% (max) |
+
+### Whoop Auto-Triggers
+Configure automatic habit completion based on:
+- `WHOOP_RECOVERY_ABOVE/BELOW` - Recovery score thresholds
+- `WHOOP_SLEEP_ABOVE` - Sleep duration
+- `WHOOP_STRAIN_ABOVE` - Daily strain
+- `WHOOP_WORKOUT_TYPE` - Specific workout types
+- `ACTIVITY_COMPLETED` - Chain completions
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+Please ensure your code:
+- Passes all existing tests (`npm run test`)
+- Follows the existing code style (`npm run lint`)
+- Includes tests for new functionality
+
+---
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+Built with care for balance, not burnout.
