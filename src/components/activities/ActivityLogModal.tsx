@@ -226,29 +226,61 @@ export function ActivityLogModal({
 
               {/* Points Input */}
               <div>
-                <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Points <span className="text-text-muted font-normal">(1-100)</span>
+                <label className="block text-sm font-medium text-text-secondary mb-3">
+                  Points <span className="text-text-muted font-normal">(daily goal: 100 per pillar)</span>
                 </label>
-                <div className="relative">
+
+                {/* Preset Buttons */}
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  {[
+                    { value: 10, label: 'Light' },
+                    { value: 25, label: 'Regular' },
+                    { value: 50, label: 'Important' },
+                    { value: 100, label: 'Essential' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setPoints(preset.value)}
+                      className={`p-3 rounded-xl border-2 transition-all ${
+                        points === preset.value
+                          ? 'border-current bg-current/10'
+                          : 'border-surface-lighter bg-surface-light hover:border-surface-lighter/80'
+                      }`}
+                      style={points === preset.value ? { borderColor: color, color } : {}}
+                    >
+                      <span className={`block text-lg font-bold ${
+                        points === preset.value ? '' : 'text-text-primary'
+                      }`}>
+                        {preset.value}
+                      </span>
+                      <span className={`block text-xs ${
+                        points === preset.value ? 'opacity-80' : 'text-text-muted'
+                      }`}>
+                        {preset.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Slider */}
+                <div className="space-y-2">
                   <input
-                    type="number"
-                    value={points}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      if (!isNaN(val)) {
-                        setPoints(Math.min(100, Math.max(1, val)));
-                      }
-                    }}
+                    type="range"
                     min="1"
                     max="100"
-                    className="w-full px-4 py-3 bg-surface-light border border-surface-lighter rounded-xl
-                      text-text-primary placeholder-text-muted
-                      focus:outline-none focus:ring-2 focus:border-transparent"
-                    style={{ '--tw-ring-color': color } as React.CSSProperties}
+                    value={points}
+                    onChange={(e) => setPoints(parseInt(e.target.value, 10))}
+                    className="w-full h-2 rounded-full appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, ${color} 0%, ${color} ${points}%, rgba(255,255,255,0.1) ${points}%, rgba(255,255,255,0.1) 100%)`,
+                    }}
                   />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-text-muted">
-                    pts
-                  </span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-text-muted">1</span>
+                    <span className="text-lg font-bold" style={{ color }}>{points} pts</span>
+                    <span className="text-xs text-text-muted">100</span>
+                  </div>
                 </div>
               </div>
 
