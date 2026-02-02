@@ -32,11 +32,16 @@ interface TriggerTypeConfig {
 }
 
 const AUTO_TRIGGER_TYPES: TriggerTypeConfig[] = [
+  // Whoop triggers
   { type: 'WHOOP_RECOVERY_ABOVE', label: 'Recovery above', description: 'When Whoop recovery % is at or above threshold', needsThreshold: true, unit: '%', defaultValue: 60 },
   { type: 'WHOOP_RECOVERY_BELOW', label: 'Recovery below', description: 'When Whoop recovery % is below threshold', needsThreshold: true, unit: '%', defaultValue: 50 },
   { type: 'WHOOP_SLEEP_ABOVE', label: 'Sleep more than', description: 'When Whoop sleep hours are at or above threshold', needsThreshold: true, unit: 'hours', defaultValue: 7 },
   { type: 'WHOOP_STRAIN_ABOVE', label: 'Strain above', description: 'When Whoop strain is at or above threshold', needsThreshold: true, unit: 'strain', defaultValue: 10 },
   { type: 'WHOOP_WORKOUT_TYPE', label: 'Workout logged', description: 'When a specific workout type is logged in Whoop', needsWorkoutType: true },
+  // Nutrition triggers
+  { type: 'NUTRITION_PROTEIN_ABOVE', label: 'Protein above', description: 'When protein intake reaches threshold', needsThreshold: true, unit: 'g', defaultValue: 100 },
+  { type: 'NUTRITION_HEALTHY_MEALS', label: 'Healthy meals', description: 'When healthy meals count reaches threshold (2 = majority)', needsThreshold: true, unit: 'meals', defaultValue: 2 },
+  // Activity trigger
   { type: 'ACTIVITY_COMPLETED', label: 'Activity completed', description: 'When another activity is completed', needsActivity: true },
 ];
 
@@ -284,6 +289,13 @@ export function StepCueTrigger({ formData, onChange, pillar }: StepCueTriggerPro
                         </option>
                       ))}
                     </optgroup>
+                    <optgroup label="Nutrition">
+                      {AUTO_TRIGGER_TYPES.filter(t => t.type.startsWith('NUTRITION')).map((config) => (
+                        <option key={config.type} value={config.type}>
+                          {config.label}
+                        </option>
+                      ))}
+                    </optgroup>
                     <optgroup label="Activity">
                       {AUTO_TRIGGER_TYPES.filter(t => t.type === 'ACTIVITY_COMPLETED').map((config) => (
                         <option key={config.type} value={config.type}>
@@ -309,7 +321,7 @@ export function StepCueTrigger({ formData, onChange, pillar }: StepCueTriggerPro
                           thresholdValue: parseFloat(e.target.value) || 0,
                         })}
                         min={0}
-                        max={currentAutoTriggerConfig.unit === '%' ? 100 : currentAutoTriggerConfig.unit === 'strain' ? 21 : 24}
+                        max={currentAutoTriggerConfig.unit === '%' ? 100 : currentAutoTriggerConfig.unit === 'strain' ? 21 : currentAutoTriggerConfig.unit === 'g' ? 300 : currentAutoTriggerConfig.unit === 'meals' ? 3 : 24}
                         step={currentAutoTriggerConfig.unit === 'hours' ? 0.5 : 1}
                         className="flex-1 px-4 py-3 bg-surface-light border border-surface-lighter rounded-xl
                           text-text-primary focus:outline-none focus:ring-2 focus:border-transparent"
