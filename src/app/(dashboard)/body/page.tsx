@@ -177,6 +177,7 @@ export default function BodyPage() {
     lunch: null,
     dinner: null,
   });
+  const [hasNutritionData, setHasNutritionData] = useState(false);
 
   // Derived state
   const isToday = isDateToday(selectedDate);
@@ -210,10 +211,11 @@ export default function BodyPage() {
       const dateStr = formatDateParam(selectedDate);
       const dateParam = isDateToday(selectedDate) ? '' : `?date=${dateStr}`;
 
-      const [activitiesRes, statusRes, logsRes] = await Promise.all([
+      const [activitiesRes, statusRes, logsRes, nutritionRes] = await Promise.all([
         fetch('/api/v1/activities?pillar=BODY', { headers }),
         fetch(`/api/v1/daily-status${dateParam}`, { headers }),
         fetch(`/api/v1/activity-logs?pillar=BODY&date=${dateStr}`, { headers }),
+        fetch(`/api/v1/nutrition?date=${dateStr}`, { headers }),
       ]);
 
       if (activitiesRes.ok) {
@@ -229,6 +231,13 @@ export default function BodyPage() {
       if (logsRes.ok) {
         const data = await logsRes.json();
         setActivityLogs(data.data || []);
+      }
+
+      if (nutritionRes.ok) {
+        const data = await nutritionRes.json();
+        setProteinGrams(data.data.proteinGrams);
+        setMealQuality(data.data.mealQuality);
+        setHasNutritionData(data.data.hasData);
       }
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -536,124 +545,67 @@ export default function BodyPage() {
         </motion.section>
       )}
 
-      {/* Nutrition Section */}
-      {isToday && (
+      {/* Nutrition Section - Only shown when data is logged */}
+      {hasNutritionData && (
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-surface/60 backdrop-blur-lg rounded-2xl p-5 border border-white/5"
+          className="bg-surface/60 backdrop-blur-lg rounded-2xl p-5 border border-white/5 cursor-pointer hover:bg-surface/80 transition-colors"
+          onClick={() => isToday && setShowNutritionModal(true)}
         >
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-              <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-text-primary">Nutrition</h3>
-              <p className="text-xs text-text-muted">Track meals and protein</p>
-            </div>
-          </div>
-
-          {/* Protein Tracking */}
-          <div className="mb-5">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-text-secondary">Protein</span>
-              <span className="text-sm font-medium" style={{ color: BODY_COLOR }}>
-                {proteinGrams}g
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min="0"
-                max="200"
-                value={proteinGrams}
-                onChange={(e) => setProteinGrams(parseInt(e.target.value))}
-                className="flex-1 h-2 bg-surface-light rounded-full appearance-none cursor-pointer"
-                style={{
-                  background: `linear-gradient(to right, ${BODY_COLOR} 0%, ${BODY_COLOR} ${proteinGrams / 2}%, rgba(255,255,255,0.1) ${proteinGrams / 2}%)`,
-                }}
-              />
-              <div className="flex gap-1">
-                {[25, 50, 100, 150].map((preset) => (
-                  <button
-                    key={preset}
-                    onClick={() => setProteinGrams(preset)}
-                    className={`px-2 py-1 rounded text-xs transition-colors ${
-                      proteinGrams === preset
-                        ? 'bg-surface-lighter text-text-primary'
-                        : 'text-text-muted hover:bg-surface-light'
-                    }`}
-                  >
-                    {preset}g
-                  </button>
-                ))}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary">Nutrition</h3>
+                <p className="text-xs text-text-muted">Today&apos;s intake</p>
               </div>
             </div>
+            {isToday && (
+              <svg className="w-5 h-5 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            )}
           </div>
 
-          {/* Meal Quality Tracking */}
-          <div className="space-y-3">
+          {/* Protein Display */}
+          <div className="flex items-center justify-between py-2 border-b border-white/5">
+            <span className="text-sm text-text-secondary">Protein</span>
+            <span className="text-lg font-semibold" style={{ color: BODY_COLOR }}>
+              {proteinGrams}g
+            </span>
+          </div>
+
+          {/* Meals Display */}
+          <div className="grid grid-cols-3 gap-3 mt-4">
             {(['breakfast', 'lunch', 'dinner'] as const).map((meal) => {
-              const mealLabels = {
-                breakfast: 'Breakfast',
-                lunch: 'Lunch',
-                dinner: 'Dinner',
+              const mealLabels = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
+              const mealIcons = { breakfast: '🌅', lunch: '☀️', dinner: '🌙' };
+              const quality = mealQuality[meal];
+              const qualityColors = {
+                healthy: 'bg-green-500/20 text-green-400',
+                okay: 'bg-yellow-500/20 text-yellow-400',
+                bad: 'bg-red-500/20 text-red-400',
               };
-              const currentQuality = mealQuality[meal];
 
               return (
-                <div key={meal} className="flex items-center justify-between">
-                  <span className="text-sm text-text-secondary">{mealLabels[meal]}</span>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() =>
-                        setMealQuality((prev) => ({
-                          ...prev,
-                          [meal]: prev[meal] === 'healthy' ? null : 'healthy',
-                        }))
-                      }
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        currentQuality === 'healthy'
-                          ? 'bg-green-500/20 text-green-400 ring-1 ring-green-500/30'
-                          : 'bg-surface-light text-text-muted hover:bg-surface-lighter'
-                      }`}
-                    >
-                      Healthy
-                    </button>
-                    <button
-                      onClick={() =>
-                        setMealQuality((prev) => ({
-                          ...prev,
-                          [meal]: prev[meal] === 'okay' ? null : 'okay',
-                        }))
-                      }
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        currentQuality === 'okay'
-                          ? 'bg-yellow-500/20 text-yellow-400 ring-1 ring-yellow-500/30'
-                          : 'bg-surface-light text-text-muted hover:bg-surface-lighter'
-                      }`}
-                    >
-                      Okay
-                    </button>
-                    <button
-                      onClick={() =>
-                        setMealQuality((prev) => ({
-                          ...prev,
-                          [meal]: prev[meal] === 'bad' ? null : 'bad',
-                        }))
-                      }
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        currentQuality === 'bad'
-                          ? 'bg-red-500/20 text-red-400 ring-1 ring-red-500/30'
-                          : 'bg-surface-light text-text-muted hover:bg-surface-lighter'
-                      }`}
-                    >
-                      Bad
-                    </button>
-                  </div>
+                <div key={meal} className="text-center">
+                  <span className="text-lg">{mealIcons[meal]}</span>
+                  <p className="text-xs text-text-muted mt-1">{mealLabels[meal]}</p>
+                  {quality ? (
+                    <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium capitalize ${qualityColors[quality]}`}>
+                      {quality}
+                    </span>
+                  ) : (
+                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-xs text-text-muted bg-surface-light">
+                      --
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -1014,10 +966,34 @@ export default function BodyPage() {
       <NutritionLogModal
         isOpen={showNutritionModal}
         onClose={() => setShowNutritionModal(false)}
-        onLogged={(data: NutritionData) => {
-          setProteinGrams(data.proteinGrams);
-          setMealQuality(data.mealQuality);
-          setNotification({ type: 'success', message: 'Nutrition logged!' });
+        onLogged={async (data: NutritionData) => {
+          try {
+            const dateStr = formatDateParam(selectedDate);
+            const res = await fetch('/api/v1/nutrition', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                date: dateStr,
+                proteinGrams: data.proteinGrams,
+                mealQuality: data.mealQuality,
+              }),
+            });
+
+            if (res.ok) {
+              setProteinGrams(data.proteinGrams);
+              setMealQuality(data.mealQuality);
+              setHasNutritionData(true);
+              setNotification({ type: 'success', message: 'Nutrition logged!' });
+            } else {
+              setNotification({ type: 'error', message: 'Failed to save nutrition' });
+            }
+          } catch (error) {
+            console.error('Nutrition save error:', error);
+            setNotification({ type: 'error', message: 'Failed to save nutrition' });
+          }
         }}
         initialData={{ proteinGrams, mealQuality }}
       />

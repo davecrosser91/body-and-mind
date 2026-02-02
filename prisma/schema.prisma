@@ -232,6 +232,7 @@ model User {
   streaks             Streak[]
   weightConfig        WeightConfig?
   whoopConnection     WhoopConnection?
+  nutritionLogs       NutritionLog[]
 }
 
 model WeightConfig {
@@ -357,6 +358,29 @@ model JournalEntry {
   @@index([createdAt])
 }
 
+model NutritionLog {
+  id              String      @id @default(cuid())
+  userId          String
+  date            DateTime    @db.Date
+  proteinGrams    Int         @default(0)
+  breakfastQuality MealQuality?
+  lunchQuality    MealQuality?
+  dinnerQuality   MealQuality?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+}
+
+enum MealQuality {
+  HEALTHY
+  OKAY
+  BAD
+}
+
 enum AutoTriggerType {
   WHOOP_RECOVERY_ABOVE
   WHOOP_RECOVERY_BELOW
@@ -364,6 +388,8 @@ enum AutoTriggerType {
   WHOOP_STRAIN_ABOVE
   WHOOP_WORKOUT_TYPE
   ACTIVITY_COMPLETED
+  NUTRITION_PROTEIN_ABOVE
+  NUTRITION_HEALTHY_MEALS
 }
 
 enum Category {

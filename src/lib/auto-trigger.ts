@@ -24,6 +24,10 @@ export interface TriggerContext {
   // Activity completion
   completedActivityId?: string
 
+  // Nutrition data
+  nutritionProteinGrams?: number // grams of protein consumed
+  nutritionHealthyMealsCount?: number // 0-3 healthy meals
+
   // Future integrations (8sleep, Apple Watch, etc.)
   // eightsleepSleepScore?: number
   // appleWorkoutTypeId?: number
@@ -87,6 +91,8 @@ export async function evaluateAutoTriggers(
     whoopStrain: context.whoopStrain,
     whoopWorkoutTypeId: context.whoopWorkoutTypeId,
     completedActivityId: context.completedActivityId,
+    nutritionProteinGrams: context.nutritionProteinGrams,
+    nutritionHealthyMealsCount: context.nutritionHealthyMealsCount,
   })
 
   // Get today's date range for checking existing completions
@@ -193,6 +199,15 @@ function evaluateTriggerCondition(
       if (!context.completedActivityId) return false
       return context.completedActivityId === trigger.triggerActivityId
 
+    case 'NUTRITION_PROTEIN_ABOVE':
+      if (context.nutritionProteinGrams === undefined) return false
+      return context.nutritionProteinGrams >= (trigger.thresholdValue ?? 0)
+
+    case 'NUTRITION_HEALTHY_MEALS':
+      if (context.nutritionHealthyMealsCount === undefined) return false
+      // Trigger if majority (2+) of meals are healthy
+      return context.nutritionHealthyMealsCount >= (trigger.thresholdValue ?? 2)
+
     default:
       console.warn(`[AutoTrigger] Unknown trigger type: ${trigger.triggerType}`)
       return false
@@ -219,6 +234,10 @@ function getCompletionDetails(
       return `Auto-triggered: Workout type ${context.whoopWorkoutTypeId} logged`
     case 'ACTIVITY_COMPLETED':
       return `Auto-triggered: Linked activity completed`
+    case 'NUTRITION_PROTEIN_ABOVE':
+      return `Auto-triggered: ${context.nutritionProteinGrams}g protein consumed`
+    case 'NUTRITION_HEALTHY_MEALS':
+      return `Auto-triggered: ${context.nutritionHealthyMealsCount} healthy meals`
     default:
       return 'Auto-triggered'
   }
