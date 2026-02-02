@@ -41,9 +41,6 @@ services:
       - "traefik.http.routers.habits.entrypoints=websecure"
       - "traefik.http.routers.habits.tls.certresolver=letsencrypt"
       - "traefik.http.services.habits.loadbalancer.server.port=3000"
-      # Health check
-      - "traefik.http.services.habits.loadbalancer.healthcheck.path=/api/v1/health"
-      - "traefik.http.services.habits.loadbalancer.healthcheck.interval=30s"
       # Rate limiting
       - "traefik.http.middlewares.habits-ratelimit.ratelimit.average=100"
       - "traefik.http.middlewares.habits-ratelimit.ratelimit.burst=50"
@@ -52,12 +49,6 @@ services:
       - "traefik.http.middlewares.habits-headers.headers.stsSeconds=31536000"
       - "traefik.http.middlewares.habits-headers.headers.stsIncludeSubdomains=true"
       - "traefik.http.middlewares.habits-headers.headers.frameDeny=true"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     networks:
       - proxy
     deploy:
