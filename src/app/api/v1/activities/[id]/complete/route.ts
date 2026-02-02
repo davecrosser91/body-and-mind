@@ -22,8 +22,12 @@ import {
   Intensity,
   MuscleGroup,
   TrainingLocation,
+  MeditationTechnique,
+  JournalEntryType,
+  Mood,
 } from '@prisma/client'
 import { evaluateAutoTriggers } from '@/lib/auto-trigger'
+import { updateStreaksForDate } from '@/lib/streaks'
 
 // Training details input type
 interface TrainingDetailsInput {
@@ -48,6 +52,26 @@ interface TrainingDetailsInput {
   source?: string
   externalWorkoutId?: string
   externalData?: Record<string, unknown>
+}
+
+// Meditation details input type
+interface MeditationDetailsInput {
+  durationMinutes: number
+  technique?: string
+  moodBefore?: string
+  moodAfter?: string
+  guidedApp?: string
+  notes?: string
+  source?: string
+  externalId?: string
+}
+
+// Journal entry input type
+interface JournalEntryInput {
+  entryType: string
+  mood?: string
+  content: string
+  wordCount: number
 }
 
 interface RouteContext {
@@ -96,11 +120,15 @@ export async function POST(request: NextRequest, context: RouteContext) {
     let details: string | undefined
     let source: Source = Source.MANUAL
     let trainingDetails: TrainingDetailsInput | undefined
+    let meditationDetails: MeditationDetailsInput | undefined
+    let journalEntry: JournalEntryInput | undefined
 
     try {
       const body = await request.json()
       details = body.details
       trainingDetails = body.trainingDetails
+      meditationDetails = body.meditationDetails
+      journalEntry = body.journalEntry
 
       if (body.source) {
         const validSources = Object.values(Source)
@@ -166,6 +194,65 @@ export async function POST(request: NextRequest, context: RouteContext) {
       // Validate RPE
       if (trainingDetails.rpe !== undefined && (trainingDetails.rpe < 1 || trainingDetails.rpe > 10)) {
         return badRequestError('rpe must be between 1 and 10')
+      }
+    }
+
+    // Validate meditation details if provided
+    if (meditationDetails) {
+      if (activity.subCategory !== 'MEDITATION') {
+        return badRequestError('meditationDetails can only be provided for MEDITATION activities')
+      }
+
+      // Validate duration
+      if (!meditationDetails.durationMinutes || meditationDetails.durationMinutes < 1) {
+        return badRequestError('durationMinutes is required and must be at least 1')
+      }
+
+      // Validate technique
+      if (meditationDetails.technique) {
+        const validTechniques = Object.values(MeditationTechnique)
+        if (!validTechniques.includes(meditationDetails.technique as MeditationTechnique)) {
+          return badRequestError(
+            `Invalid technique. Must be one of: ${validTechniques.join(', ')}`
+          )
+        }
+      }
+
+      // Validate moods
+      const validMoods = Object.values(Mood)
+      if (meditationDetails.moodBefore && !validMoods.includes(meditationDetails.moodBefore as Mood)) {
+        return badRequestError(`Invalid moodBefore. Must be one of: ${validMoods.join(', ')}`)
+      }
+      if (meditationDetails.moodAfter && !validMoods.includes(meditationDetails.moodAfter as Mood)) {
+        return badRequestError(`Invalid moodAfter. Must be one of: ${validMoods.join(', ')}`)
+      }
+    }
+
+    // Validate journal entry if provided
+    if (journalEntry) {
+      if (activity.subCategory !== 'JOURNALING') {
+        return badRequestError('journalEntry can only be provided for JOURNALING activities')
+      }
+
+      // Validate entry type
+      const validEntryTypes = Object.values(JournalEntryType)
+      if (!validEntryTypes.includes(journalEntry.entryType as JournalEntryType)) {
+        return badRequestError(
+          `Invalid entryType. Must be one of: ${validEntryTypes.join(', ')}`
+        )
+      }
+
+      // Validate content
+      if (!journalEntry.content || !journalEntry.content.trim()) {
+        return badRequestError('content is required for journal entries')
+      }
+
+      // Validate mood
+      if (journalEntry.mood) {
+        const validMoods = Object.values(Mood)
+        if (!validMoods.includes(journalEntry.mood as Mood)) {
+          return badRequestError(`Invalid mood. Must be one of: ${validMoods.join(', ')}`)
+        }
       }
     }
 
@@ -279,6 +366,60 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
     }
 
+    // Create meditation details if provided
+    let meditationDetailsResult = null
+    if (meditationDetails) {
+      const createdDetails = await prisma.meditationDetails.create({
+        data: {
+          activityCompletionId: completion.id,
+          durationMinutes: meditationDetails.durationMinutes,
+          technique: meditationDetails.technique as MeditationTechnique | undefined,
+          moodBefore: meditationDetails.moodBefore as Mood | undefined,
+          moodAfter: meditationDetails.moodAfter as Mood | undefined,
+          guidedApp: meditationDetails.guidedApp,
+          notes: meditationDetails.notes,
+          source: meditationDetails.source as Source | undefined,
+          externalId: meditationDetails.externalId,
+        },
+      })
+
+      meditationDetailsResult = {
+        durationMinutes: createdDetails.durationMinutes,
+        technique: createdDetails.technique,
+        moodBefore: createdDetails.moodBefore,
+        moodAfter: createdDetails.moodAfter,
+        guidedApp: createdDetails.guidedApp,
+        notes: createdDetails.notes,
+      }
+    }
+
+    // Create journal entry if provided
+    let journalEntryResult = null
+    if (journalEntry) {
+      const createdEntry = await prisma.journalEntry.create({
+        data: {
+          activityCompletionId: completion.id,
+          entryType: journalEntry.entryType as JournalEntryType,
+          mood: journalEntry.mood as Mood | undefined,
+          content: journalEntry.content,
+          wordCount: journalEntry.wordCount,
+        },
+      })
+
+      journalEntryResult = {
+        id: createdEntry.id,
+        entryType: createdEntry.entryType,
+        mood: createdEntry.mood,
+        wordCount: createdEntry.wordCount,
+        createdAt: createdEntry.createdAt,
+      }
+    }
+
+    // Update streaks after activity completion
+    updateStreaksForDate(user.id, new Date()).catch((error) => {
+      console.error('[Streaks] Update error after activity completion:', error)
+    })
+
     // Evaluate auto-triggers that depend on this activity being completed
     // (runs async, errors are logged but don't affect the response)
     evaluateAutoTriggers(user.id, {
@@ -295,6 +436,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       details: completion.details,
       source: completion.source,
       trainingDetails: trainingDetailsResult,
+      meditationDetails: meditationDetailsResult,
+      journalEntry: journalEntryResult,
     })
   } catch (error) {
     console.error('Activity completion error:', error)

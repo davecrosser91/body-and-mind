@@ -45,14 +45,16 @@ model Activity {
 }
 
 model ActivityCompletion {
-  id              String           @id @default(cuid())
-  completedAt     DateTime         @default(now())
-  pointsEarned    Int
-  details         String?
-  source          Source           @default(MANUAL)
-  activityId      String
-  activity        Activity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  trainingDetails TrainingDetails?
+  id                String              @id @default(cuid())
+  completedAt       DateTime            @default(now())
+  pointsEarned      Int
+  details           String?
+  source            Source              @default(MANUAL)
+  activityId        String
+  activity          Activity            @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  trainingDetails   TrainingDetails?
+  meditationDetails MeditationDetails?
+  journalEntry      JournalEntry?
 
   @@index([activityId])
   @@index([completedAt])
@@ -320,6 +322,41 @@ model Exercise {
   @@index([trainingDetailsId])
 }
 
+// Meditation details for individual meditation completions
+model MeditationDetails {
+  id                   String              @id @default(cuid())
+  activityCompletionId String              @unique
+  activityCompletion   ActivityCompletion  @relation(fields: [activityCompletionId], references: [id], onDelete: Cascade)
+  durationMinutes      Int
+  technique            MeditationTechnique?
+  moodBefore           Mood?
+  moodAfter            Mood?
+  guidedApp            String?
+  notes                String?
+  source               Source?
+  externalId           String?
+  createdAt            DateTime            @default(now())
+
+  @@index([activityCompletionId])
+}
+
+// Journal entries for journaling completions
+model JournalEntry {
+  id                   String              @id @default(cuid())
+  activityCompletionId String              @unique
+  activityCompletion   ActivityCompletion  @relation(fields: [activityCompletionId], references: [id], onDelete: Cascade)
+  entryType            JournalEntryType
+  mood                 Mood?
+  content              String              @db.Text
+  wordCount            Int
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([activityCompletionId])
+  @@index([entryType])
+  @@index([createdAt])
+}
+
 enum AutoTriggerType {
   WHOOP_RECOVERY_ABOVE
   WHOOP_RECOVERY_BELOW
@@ -419,4 +456,30 @@ enum WeightPreset {
   RECOVERY
   KNOWLEDGE
   CUSTOM
+}
+
+enum MeditationTechnique {
+  BREATHING
+  GUIDED
+  BODY_SCAN
+  MINDFULNESS
+  VISUALIZATION
+  MANTRA
+  OTHER
+}
+
+enum JournalEntryType {
+  GRATITUDE
+  REFLECTION
+  FREE_WRITE
+  MORNING_PAGES
+  EVENING_REVIEW
+}
+
+enum Mood {
+  GREAT
+  GOOD
+  NEUTRAL
+  LOW
+  STRESSED
 }

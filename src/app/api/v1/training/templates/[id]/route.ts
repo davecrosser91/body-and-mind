@@ -46,8 +46,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
         archived: false,
       },
       include: {
-        TrainingTemplate: true,
-        ActivityCompletion: {
+        trainingTemplate: true,
+        completions: {
           select: { id: true },
         },
       },
@@ -65,15 +65,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
       cueType: template.cueType,
       cueValue: template.cueValue,
       createdAt: template.createdAt,
-      usageCount: template.ActivityCompletion.length,
-      trainingDefaults: template.TrainingTemplate
+      usageCount: template.completions.length,
+      trainingDefaults: template.trainingTemplate
         ? {
-            workoutType: template.TrainingTemplate.workoutType,
-            durationMinutes: template.TrainingTemplate.durationMinutes,
-            intensity: template.TrainingTemplate.intensity,
-            muscleGroups: template.TrainingTemplate.muscleGroups,
-            location: template.TrainingTemplate.location,
-            defaultExercises: template.TrainingTemplate.defaultExercises,
+            workoutType: template.trainingTemplate.workoutType,
+            durationMinutes: template.trainingTemplate.durationMinutes,
+            intensity: template.trainingTemplate.intensity,
+            muscleGroups: template.trainingTemplate.muscleGroups,
+            location: template.trainingTemplate.location,
+            defaultExercises: template.trainingTemplate.defaultExercises,
           }
         : null,
     })
@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         archived: false,
       },
       include: {
-        TrainingTemplate: true,
+        trainingTemplate: true,
       },
     })
 

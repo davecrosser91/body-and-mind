@@ -13,19 +13,54 @@ interface MeditationDashboardProps {
   activities: Activity[];
   totalPoints: number;
   streak?: number;
+  onStartMeditation?: () => void;
+  isToday?: boolean;
 }
 
-export function MeditationDashboard({ activities, totalPoints, streak = 0 }: MeditationDashboardProps) {
+export function MeditationDashboard({
+  activities,
+  totalPoints,
+  streak = 0,
+  onStartMeditation,
+  isToday = true,
+}: MeditationDashboardProps) {
   const color = '#8B5CF6';
 
   return (
     <div className="space-y-4">
+      {/* Quick Start Card */}
+      {isToday && onStartMeditation && (
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          onClick={onStartMeditation}
+          className="w-full bg-gradient-to-r from-purple-500/20 to-indigo-500/20 backdrop-blur-lg rounded-2xl p-4 border border-purple-500/30 text-left hover:border-purple-500/50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: `${color}30` }}
+            >
+              <span className="text-2xl">🧘</span>
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-text-primary">Start Meditation</p>
+              <p className="text-sm text-text-muted">Log a session or import from Whoop</p>
+            </div>
+            <svg className="w-5 h-5 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </motion.button>
+      )}
+
       {/* Streak Card */}
       {streak > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
           className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5"
         >
           <div className="flex items-center gap-3">
@@ -54,7 +89,7 @@ export function MeditationDashboard({ activities, totalPoints, streak = 0 }: Med
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: streak > 0 ? 0.1 : 0 }}
+        transition={{ duration: 0.3, delay: 0.2 }}
         className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5"
       >
         <div className="flex items-center justify-between">
@@ -68,7 +103,7 @@ export function MeditationDashboard({ activities, totalPoints, streak = 0 }: Med
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: streak > 0 ? 0.2 : 0.1 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
           className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5"
         >
           <h3 className="text-sm font-medium text-text-muted mb-3">Today&apos;s Meditation</h3>
@@ -87,11 +122,11 @@ export function MeditationDashboard({ activities, totalPoints, streak = 0 }: Med
       )}
 
       {/* Empty State */}
-      {activities.length === 0 && (
+      {activities.length === 0 && !isToday && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: streak > 0 ? 0.2 : 0.1 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
           className="text-center py-8"
         >
           <div

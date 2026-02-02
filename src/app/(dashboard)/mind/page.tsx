@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScoreRing } from '@/components/scores/ScoreRing';
 import { ActivityLogModal, ActivityDetailModal } from '@/components/activities';
+import { MeditationLogModal } from '@/components/meditation';
+import { JournalingLogModal } from '@/components/journaling';
 import {
   SubCategoryTabs,
   MeditationDashboard,
@@ -21,6 +23,7 @@ import { QuickLogChips } from '@/components/activities/QuickLogChips';
 import { PREDEFINED_SUBCATEGORIES, getSubcategoryConfig, getSubcategoriesForPillar } from '@/lib/subcategories';
 import { useAuth } from '@/hooks/useAuth';
 import { DateNavigation } from '@/components/navigation';
+import { MindFAB } from '@/components/navigation/MindFAB';
 
 /**
  * Check if a date is today
@@ -130,6 +133,8 @@ export default function MindPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [customSubcategories, setCustomSubcategories] = useState<CustomSubcategory[]>([]);
   const [showActivityModal, setShowActivityModal] = useState(false);
+  const [showQuickMeditation, setShowQuickMeditation] = useState(false);
+  const [showQuickJournaling, setShowQuickJournaling] = useState(false);
   const [isQuickLogging, setIsQuickLogging] = useState<string | null>(null);
   const [streak, setStreak] = useState(0);
   const [notification, setNotification] = useState<{
@@ -415,6 +420,8 @@ export default function MindPage() {
             activities={categoryActivities}
             totalPoints={totalPoints}
             streak={streak}
+            onStartMeditation={() => setShowQuickMeditation(true)}
+            isToday={isToday}
           />
         );
       case 'READING':
@@ -436,6 +443,8 @@ export default function MindPage() {
           <JournalingDashboard
             activities={categoryActivities}
             totalPoints={totalPoints}
+            onStartJournaling={() => setShowQuickJournaling(true)}
+            isToday={isToday}
           />
         );
       default:
@@ -670,17 +679,39 @@ export default function MindPage() {
         </AnimatePresence>
       </motion.section>
 
-      {/* Activity Log Modal */}
-      <ActivityLogModal
-        isOpen={showActivityModal}
-        onClose={() => setShowActivityModal(false)}
-        onLogged={() => {
-          setShowActivityModal(false);
-          fetchData();
-          setNotification({ type: 'success', message: 'Activity logged!' });
-        }}
-        pillar="MIND"
-      />
+      {/* Activity Log Modal - Use specialized modals for MEDITATION and JOURNALING */}
+      {selectedCategory === 'MEDITATION' ? (
+        <MeditationLogModal
+          isOpen={showActivityModal}
+          onClose={() => setShowActivityModal(false)}
+          onLogged={() => {
+            setShowActivityModal(false);
+            fetchData();
+            setNotification({ type: 'success', message: 'Meditation logged!' });
+          }}
+        />
+      ) : selectedCategory === 'JOURNALING' ? (
+        <JournalingLogModal
+          isOpen={showActivityModal}
+          onClose={() => setShowActivityModal(false)}
+          onLogged={() => {
+            setShowActivityModal(false);
+            fetchData();
+            setNotification({ type: 'success', message: 'Journal entry saved!' });
+          }}
+        />
+      ) : (
+        <ActivityLogModal
+          isOpen={showActivityModal}
+          onClose={() => setShowActivityModal(false)}
+          onLogged={() => {
+            setShowActivityModal(false);
+            fetchData();
+            setNotification({ type: 'success', message: 'Activity logged!' });
+          }}
+          pillar="MIND"
+        />
+      )}
 
       {/* Activity Detail Modal (Edit/Delete) */}
       <ActivityDetailModal
@@ -712,6 +743,37 @@ export default function MindPage() {
         pillar="MIND"
         availableSubcategories={getAllSubcategories()}
       />
+
+      {/* Quick-Add Modals */}
+      <MeditationLogModal
+        isOpen={showQuickMeditation}
+        onClose={() => setShowQuickMeditation(false)}
+        onLogged={() => {
+          setShowQuickMeditation(false);
+          fetchData();
+          setNotification({ type: 'success', message: 'Meditation logged!' });
+        }}
+        quickAdd
+      />
+
+      <JournalingLogModal
+        isOpen={showQuickJournaling}
+        onClose={() => setShowQuickJournaling(false)}
+        onLogged={() => {
+          setShowQuickJournaling(false);
+          fetchData();
+          setNotification({ type: 'success', message: 'Journal entry saved!' });
+        }}
+        quickAdd
+      />
+
+      {/* Floating Action Button */}
+      {isToday && (
+        <MindFAB
+          onMeditationClick={() => setShowQuickMeditation(true)}
+          onJournalingClick={() => setShowQuickJournaling(true)}
+        />
+      )}
     </motion.div>
   );
 }

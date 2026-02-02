@@ -18,12 +18,19 @@ import {
 // Habit components
 import { HabitListNew, HabitNew } from '@/components/habits';
 
+// Activity components
+import { AddActivityPicker, ActivityLogModal } from '@/components/activities';
+import type { ActivityType } from '@/components/activities';
+import { TrainingLogModal } from '@/components/training/TrainingLogModal';
+import { MeditationLogModal } from '@/components/meditation/MeditationLogModal';
+import { JournalingLogModal } from '@/components/journaling/JournalingLogModal';
+
 // UI components
 import { GlassCard } from '@/components/ui/GlassCard';
 import { EmberBar } from '@/components/scores/EmberBar';
 
 // Whoop components
-import { RecoveryCard, SleepCard, TrainingCard, WhoopConnectedCard } from '@/components/whoop';
+import { RecoveryCard, RecoveryCardCompact, SleepCard, TrainingCard, StrainCardCompact, WhoopConnectedCard } from '@/components/whoop';
 
 // Auth
 import { useAuth } from '@/hooks/useAuth';
@@ -35,12 +42,12 @@ interface DailyStatusData {
   body: {
     completed: boolean;
     score: number;
-    activities: { id: string; name: string; category: string; completedAt: string }[];
+    activities: { id: string; name: string; category: string; completedAt: string; points: number }[];
   };
   mind: {
     completed: boolean;
     score: number;
-    activities: { id: string; name: string; category: string; completedAt: string }[];
+    activities: { id: string; name: string; category: string; completedAt: string; points: number }[];
   };
   streak: {
     current: number;
@@ -192,6 +199,13 @@ export default function DashboardPage() {
   const [recommendations, setRecommendations] = useState<RecommendationsData | null>(null);
   const [habits, setHabits] = useState<HabitNew[]>([]);
   const [quickActionLoading, setQuickActionLoading] = useState(false);
+
+  // Activity modal states
+  const [showActivityPicker, setShowActivityPicker] = useState(false);
+  const [showTrainingModal, setShowTrainingModal] = useState(false);
+  const [showMeditationModal, setShowMeditationModal] = useState(false);
+  const [showJournalingModal, setShowJournalingModal] = useState(false);
+  const [showActivityModal, setShowActivityModal] = useState<'BODY' | 'MIND' | null>(null);
 
   // Fetch all data
   const fetchData = useCallback(async () => {
@@ -365,6 +379,32 @@ export default function DashboardPage() {
   const handleBodyClick = () => router.push('/body');
   const handleMindClick = () => router.push('/mind');
 
+  // Activity picker handler
+  const handleActivityTypeSelect = (type: ActivityType) => {
+    switch (type) {
+      case 'training':
+        setShowTrainingModal(true);
+        break;
+      case 'meditation':
+        setShowMeditationModal(true);
+        break;
+      case 'journaling':
+        setShowJournalingModal(true);
+        break;
+      case 'body':
+        setShowActivityModal('BODY');
+        break;
+      case 'mind':
+        setShowActivityModal('MIND');
+        break;
+    }
+  };
+
+  // Handle activity logged
+  const handleActivityLogged = () => {
+    fetchData();
+  };
+
   // Loading state
   if (isLoading) {
     return <DashboardSkeleton />;
@@ -458,22 +498,38 @@ export default function DashboardPage() {
             </motion.section>
           )}
 
-          {/* Recovery Card */}
-          {dailyStatus?.recovery && dailyStatus.recovery.score !== null && dailyStatus.recovery.zone && (
+          {/* Strain & Recovery Row */}
+          {((dailyStatus.whoop.training?.strain ?? 0) > 0 || (dailyStatus?.recovery && dailyStatus.recovery.score !== null)) && (
             <motion.section
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.25 }}
+              className="grid grid-cols-2 gap-3"
             >
-              <RecoveryCard
-                data={{
-                  score: dailyStatus.recovery.score,
-                  zone: dailyStatus.recovery.zone,
-                  hrv: dailyStatus.recovery.hrv,
-                  restingHeartRate: dailyStatus.recovery.restingHeartRate,
-                  recommendation: dailyStatus.recovery.recommendation,
-                }}
-              />
+              {/* Strain on left */}
+              {dailyStatus.whoop.training && dailyStatus.whoop.training.strain > 0 ? (
+                <StrainCardCompact data={dailyStatus.whoop.training} />
+              ) : (
+                <div className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5 flex items-center justify-center">
+                  <p className="text-sm text-text-muted">No strain data</p>
+                </div>
+              )}
+              {/* Recovery on right */}
+              {dailyStatus?.recovery && dailyStatus.recovery.score !== null && dailyStatus.recovery.zone ? (
+                <RecoveryCardCompact
+                  data={{
+                    score: dailyStatus.recovery.score,
+                    zone: dailyStatus.recovery.zone,
+                    hrv: dailyStatus.recovery.hrv,
+                    restingHeartRate: dailyStatus.recovery.restingHeartRate,
+                    recommendation: dailyStatus.recovery.recommendation,
+                  }}
+                />
+              ) : (
+                <div className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5 flex items-center justify-center">
+                  <p className="text-sm text-text-muted">No recovery data</p>
+                </div>
+              )}
             </motion.section>
           )}
 
@@ -488,8 +544,8 @@ export default function DashboardPage() {
             </motion.section>
           )}
 
-          {/* Training Card */}
-          {dailyStatus.whoop.training && dailyStatus.whoop.training.strain > 0 && (
+          {/* Training Card (workout details) */}
+          {dailyStatus.whoop.training && dailyStatus.whoop.training.workouts.length > 0 && (
             <motion.section
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -569,7 +625,7 @@ export default function DashboardPage() {
         </motion.section>
       )}
 
-      {/* Today's Habits */}
+      {/* Today's Habits & Activities */}
       <motion.section
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -583,6 +639,86 @@ export default function DashboardPage() {
             onHabitCreated={handleHabitCreated}
             showAddButton={true}
           />
+
+          {/* Completed Activities (non-habit activities logged today) */}
+          <div className="mt-6 pt-6 border-t border-white/5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-text-muted">Today&apos;s Completed Activities</h3>
+              <button
+                onClick={() => setShowActivityPicker(true)}
+                className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text-primary transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add
+              </button>
+            </div>
+            {dailyStatus && (dailyStatus.body.activities.length > 0 || dailyStatus.mind.activities.length > 0) ? (
+              <>
+                <div className="space-y-2">
+                  {/* Body activities */}
+                  {dailyStatus.body.activities.map((activity) => (
+                    <div
+                      key={activity.id}
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-light/50"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-body/20 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-body" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-text-primary truncate">{activity.name}</p>
+                        <p className="text-xs text-text-muted capitalize">{activity.category.toLowerCase()}</p>
+                      </div>
+                      <span className="text-sm font-medium text-body mr-2">+{activity.points}</span>
+                      <span className="text-xs px-2 py-1 rounded-full bg-body/10 text-body">BODY</span>
+                    </div>
+                  ))}
+                  {/* Mind activities */}
+                  {dailyStatus.mind.activities.map((activity) => (
+                    <div
+                      key={activity.id}
+                      className="flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-light/50"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-mind/20 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-mind" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-text-primary truncate">{activity.name}</p>
+                        <p className="text-xs text-text-muted capitalize">{activity.category.toLowerCase()}</p>
+                      </div>
+                      <span className="text-sm font-medium text-mind mr-2">+{activity.points}</span>
+                      <span className="text-xs px-2 py-1 rounded-full bg-mind/10 text-mind">MIND</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Points Summary */}
+                <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+                  <span className="text-sm text-text-muted">Total Points</span>
+                  <div className="flex items-center gap-4">
+                    {dailyStatus.body.score > 0 && (
+                      <span className="text-sm font-medium text-body">{dailyStatus.body.score} Body</span>
+                    )}
+                    {dailyStatus.mind.score > 0 && (
+                      <span className="text-sm font-medium text-mind">{dailyStatus.mind.score} Mind</span>
+                    )}
+                    <span className="text-lg font-bold text-text-primary">
+                      {dailyStatus.body.score + dailyStatus.mind.score}
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-text-muted text-center py-4">
+                No activities logged yet. Tap + to add one!
+              </p>
+            )}
+          </div>
         </GlassCard>
       </motion.section>
 
@@ -594,6 +730,46 @@ export default function DashboardPage() {
       >
         <EmberBar days={streakCurrent} showParticles={streakCurrent >= 14} />
       </motion.section>
+
+      {/* Activity Picker Modal */}
+      <AddActivityPicker
+        isOpen={showActivityPicker}
+        onClose={() => setShowActivityPicker(false)}
+        onSelect={handleActivityTypeSelect}
+      />
+
+      {/* Training Modal */}
+      <TrainingLogModal
+        isOpen={showTrainingModal}
+        onClose={() => setShowTrainingModal(false)}
+        onLogged={handleActivityLogged}
+      />
+
+      {/* Meditation Modal */}
+      <MeditationLogModal
+        isOpen={showMeditationModal}
+        onClose={() => setShowMeditationModal(false)}
+        onLogged={handleActivityLogged}
+        quickAdd
+      />
+
+      {/* Journaling Modal */}
+      <JournalingLogModal
+        isOpen={showJournalingModal}
+        onClose={() => setShowJournalingModal(false)}
+        onLogged={handleActivityLogged}
+        quickAdd
+      />
+
+      {/* Generic Activity Modal (Body/Mind) */}
+      {showActivityModal && (
+        <ActivityLogModal
+          isOpen={true}
+          onClose={() => setShowActivityModal(null)}
+          onLogged={handleActivityLogged}
+          pillar={showActivityModal}
+        />
+      )}
     </motion.div>
   );
 }

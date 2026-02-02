@@ -316,6 +316,77 @@ export function TrainingCard({ data }: { data: TrainingData }) {
   );
 }
 
+// ============ COMPACT STRAIN CARD ============
+
+export function StrainCardCompact({ data }: { data: TrainingData }) {
+  const strainColor = getStrainColor(data.strain);
+  const maxStrain = 21;
+
+  return (
+    <div className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5 flex-1">
+      <div className="flex items-center gap-4">
+        {/* Circular Progress */}
+        <CircularProgress value={data.strain} max={maxStrain} color={strainColor} size={72} strokeWidth={6}>
+          <div className="text-center">
+            <span className="text-xl font-bold" style={{ color: strainColor }}>{data.strain.toFixed(1)}</span>
+          </div>
+        </CircularProgress>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-base font-semibold text-text-primary">Strain</h3>
+          <p className="text-xs text-text-muted mt-0.5">
+            {data.workouts.length} workout{data.workouts.length !== 1 ? 's' : ''}
+          </p>
+          <p className="text-sm text-text-secondary mt-1">{data.calories} kcal</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ COMPACT RECOVERY CARD ============
+
+export function RecoveryCardCompact({ data }: { data: RecoveryData }) {
+  const zone = getZoneColor(data.zone);
+
+  return (
+    <div className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5 flex-1">
+      <div className="flex items-center gap-4">
+        {/* Circular Progress */}
+        <CircularProgress value={data.score} color={zone.bg} size={72} strokeWidth={6}>
+          <div className="text-center">
+            <span className={`text-xl font-bold ${zone.text}`}>{data.score}</span>
+            <span className={`text-xs ${zone.text}`}>%</span>
+          </div>
+        </CircularProgress>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-text-primary">Recovery</h3>
+            <span className={`text-xs px-1.5 py-0.5 rounded-full ${zone.text} bg-white/5`}>
+              {zone.label}
+            </span>
+          </div>
+          <div className="flex gap-3 mt-1.5">
+            {data.hrv !== null && (
+              <p className="text-sm text-text-secondary">
+                {Math.round(data.hrv)}<span className="text-xs text-text-muted ml-0.5">ms</span>
+              </p>
+            )}
+            {data.restingHeartRate !== null && (
+              <p className="text-sm text-text-secondary">
+                {data.restingHeartRate}<span className="text-xs text-text-muted ml-0.5">bpm</span>
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ============ WHOOP CONNECTED CARD ============
 
 export function WhoopConnectedCard({ lastSync }: { lastSync: string | null }) {

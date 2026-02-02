@@ -1,1 +1,1 @@
-export { RecoveryCard, SleepCard, TrainingCard, WhoopConnectedCard } from './WhoopCards';
+export { RecoveryCard, RecoveryCardCompact, SleepCard, TrainingCard, StrainCardCompact, WhoopConnectedCard } from './WhoopCards';

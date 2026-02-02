@@ -47,6 +47,7 @@ interface CompletedActivity {
   name: string;
   category: string;
   completedAt: string;
+  points: number;
 }
 
 interface PillarStatus {
@@ -456,6 +457,7 @@ export async function getDailyStatus(userId: string, date?: Date): Promise<Daily
         name: activity.name,
         category: activity.subCategory,
         completedAt: completion.completedAt.toISOString(),
+        points: completion.pointsEarned,
       };
 
       if (activity.pillar === 'BODY') {
