@@ -1,0 +1,95 @@
+# ===========================================
+# Routine Game App Stack (with Traefik)
+# ===========================================
+# Prerequisites:
+#   - Traefik infrastructure running
+#   - docker network create proxy (if not exists)
+#   - .env file with credentials
+#
+# Deploy:
+#   docker-compose -f docker-compose.app.yml up -d
+
+version: '3.8'
+
+services:
+  app:
+    image: ghcr.io/davecrosser91/body-and-mind:latest
+    container_name: routine-game
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=https://${DOMAIN}
+      - WHOOP_CLIENT_ID=${WHOOP_CLIENT_ID}
+      - WHOOP_CLIENT_SECRET=${WHOOP_CLIENT_SECRET}
+      - WHOOP_REDIRECT_URI=https://${DOMAIN}/api/v1/integrations/whoop/callback
+    labels:
+      # Enable Traefik
+      - "traefik.enable=true"
+      
+      # Router for main domain
+      - "traefik.http.routers.routine-game.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.routine-game.entrypoints=websecure"
+      - "traefik.http.routers.routine-game.tls.certresolver=letsencrypt"
+      
+      # Also handle www subdomain
+      - "traefik.http.routers.routine-game-www.rule=Host(`www.${DOMAIN}`)"
+      - "traefik.http.routers.routine-game-www.entrypoints=websecure"
+      - "traefik.http.routers.routine-game-www.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.routine-game-www.middlewares=www-redirect"
+      
+      # Redirect www to non-www
+      - "traefik.http.middlewares.www-redirect.redirectregex.regex=^https://www\\.(.+)"
+      - "traefik.http.middlewares.www-redirect.redirectregex.replacement=https://$${1}"
+      - "traefik.http.middlewares.www-redirect.redirectregex.permanent=true"
+      
+      # Service port
+      - "traefik.http.services.routine-game.loadbalancer.server.port=3000"
+      
+      # Health check
+      - "traefik.http.services.routine-game.loadbalancer.healthcheck.path=/api/v1/health"
+      - "traefik.http.services.routine-game.loadbalancer.healthcheck.interval=30s"
+      
+      # Rate limiting
+      - "traefik.http.middlewares.routine-game-ratelimit.ratelimit.average=100"
+      - "traefik.http.middlewares.routine-game-ratelimit.ratelimit.burst=50"
+      - "traefik.http.routers.routine-game.middlewares=routine-game-ratelimit"
+      
+      # Security headers
+      - "traefik.http.middlewares.routine-game-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.routine-game-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.routine-game-headers.headers.frameDeny=true"
+      - "traefik.http.middlewares.routine-game-headers.headers.contentTypeNosniff=true"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - proxy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # Auto-update container when new image is pushed
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ~/.docker/config.json:/config.json:ro
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_INCLUDE_STOPPED=false
+    command: routine-game
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
