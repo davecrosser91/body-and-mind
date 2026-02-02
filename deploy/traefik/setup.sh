@@ -21,10 +21,9 @@ log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Check if running as root
+# Running as root is fine on a VPS
 if [ "$EUID" -eq 0 ]; then
-    log_error "Please don't run as root. Run as your regular user."
-    exit 1
+    log_info "Running as root - this is fine for VPS setup"
 fi
 
 # Get user input
