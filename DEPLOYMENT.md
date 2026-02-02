@@ -2,13 +2,172 @@
 
 This guide walks you through deploying Routine Game on a Hostinger VPS for a stable, scalable production environment.
 
+## Deployment Options
+
+| Method | Best For | Complexity |
+|--------|----------|------------|
+| **Docker (Recommended)** | Consistent deployments, easy rollbacks | Low |
+| PM2 + Node.js | Direct control, lower resource usage | Medium |
+
 ## Prerequisites
 
 - Hostinger VPS (KVM 2 or higher recommended)
 - Domain name pointed to your VPS IP
 - SSH access to your server
 
-## Architecture Overview
+---
+
+# Option A: Docker Deployment (Recommended)
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Hostinger VPS                        │
+│  ┌─────────────┐    ┌─────────────┐    ┌────────────┐  │
+│  │   Nginx     │───▶│   Docker    │───▶│  Next.js   │  │
+│  │  (reverse   │    │  Container  │    │   App      │  │
+│  │   proxy)    │    │             │    │            │  │
+│  └─────────────┘    └─────────────┘    └────────────┘  │
+│         │                  │                  │        │
+│         ▼                  ▼                  ▼        │
+│  ┌─────────────┐    ┌─────────────┐   ┌────────────┐   │
+│  │ Let's       │    │ Watchtower  │   │   Neon     │   │
+│  │ Encrypt SSL │    │ (auto-update│   │ PostgreSQL │   │
+│  └─────────────┘    └─────────────┘   └────────────┘   │
+└─────────────────────────────────────────────────────────┘
+        ▲
+        │ GitHub Actions builds & pushes
+        │
+┌───────┴───────┐
+│    GitHub     │
+│   Container   │
+│   Registry    │
+└───────────────┘
+```
+
+## CI/CD Flow
+
+1. Push code to `main` branch
+2. GitHub Actions builds Docker image
+3. Image pushed to GitHub Container Registry (ghcr.io)
+4. Watchtower auto-pulls new image on VPS
+5. Zero-downtime container restart
+
+## Quick Setup
+
+### 1. Install Docker on VPS
+
+```bash
+# Install Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+
+# Install Docker Compose
+sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+# Verify
+docker --version
+docker-compose --version
+```
+
+### 2. Configure GitHub Container Registry Access
+
+```bash
+# Create directory for Docker config
+mkdir -p ~/.docker
+
+# Login to GitHub Container Registry
+echo "YOUR_GITHUB_PAT" | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+```
+
+> **Note:** Create a GitHub Personal Access Token (PAT) with `read:packages` scope at https://github.com/settings/tokens
+
+### 3. Set Up Environment
+
+```bash
+mkdir -p /var/www/routine-game
+cd /var/www/routine-game
+
+# Download production compose file
+curl -O https://raw.githubusercontent.com/davecrosser91/body-and-mind/main/docker-compose.prod.yml
+
+# Create .env file
+cat > .env << EOF
+DATABASE_URL="postgresql://user:pass@host/db?sslmode=require"
+NEXTAUTH_SECRET="$(openssl rand -base64 32)"
+NEXTAUTH_URL="https://your-domain.com"
+WHOOP_CLIENT_ID="your-client-id"
+WHOOP_CLIENT_SECRET="your-secret"
+WHOOP_REDIRECT_URI="https://your-domain.com/api/v1/integrations/whoop/callback"
+EOF
+```
+
+### 4. Deploy
+
+```bash
+# Pull and start
+docker-compose -f docker-compose.prod.yml pull
+docker-compose -f docker-compose.prod.yml up -d
+
+# Check status
+docker-compose -f docker-compose.prod.yml ps
+docker-compose -f docker-compose.prod.yml logs -f
+```
+
+### 5. Set Up Nginx + SSL
+
+```bash
+# Install Nginx and Certbot
+sudo apt install -y nginx certbot python3-certbot-nginx
+
+# Get SSL certificate
+sudo certbot --nginx -d your-domain.com
+
+# Copy nginx config
+sudo curl -o /etc/nginx/sites-available/routine-game \
+  https://raw.githubusercontent.com/davecrosser91/body-and-mind/main/deploy/nginx.conf
+
+# Edit domain name in config
+sudo nano /etc/nginx/sites-available/routine-game
+
+# Enable site
+sudo ln -sf /etc/nginx/sites-available/routine-game /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+## Auto-Updates with Watchtower
+
+The `docker-compose.prod.yml` includes Watchtower, which automatically:
+- Checks for new images every 5 minutes
+- Pulls and restarts when updates are available
+- Cleans up old images
+
+To manually update:
+```bash
+docker-compose -f docker-compose.prod.yml pull
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+## Rollback
+
+```bash
+# List available tags
+docker images ghcr.io/davecrosser91/body-and-mind
+
+# Use specific version
+docker-compose -f docker-compose.prod.yml down
+# Edit docker-compose.prod.yml to use specific tag (e.g., :sha-abc123)
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+---
+
+# Option B: PM2 Deployment (Traditional)
+
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
