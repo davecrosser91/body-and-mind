@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { exchangeCodeForTokens, calculateExpiresAt } from '@/lib/whoop'
 
+// Get base URL for redirects (handles reverse proxy correctly)
+function getBaseUrl(request: NextRequest): string {
+  // Use NEXTAUTH_URL if set (recommended for production)
+  if (process.env.NEXTAUTH_URL) {
+    return process.env.NEXTAUTH_URL
+  }
+  // Fallback to request headers
+  const proto = request.headers.get('x-forwarded-proto') || 'http'
+  const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || 'localhost:3000'
+  return `${proto}://${host}`
+}
+
 /**
  * GET /api/v1/integrations/whoop/callback
  * Handles OAuth callback from Whoop
@@ -23,7 +35,7 @@ export async function GET(request: NextRequest) {
   // Handle OAuth error response
   if (error) {
     console.error('Whoop OAuth error:', error, errorDescription)
-    const redirectUrl = new URL('/settings', request.url)
+    const redirectUrl = new URL('/settings', getBaseUrl(request))
     redirectUrl.searchParams.set('whoop', 'error')
     redirectUrl.searchParams.set('message', errorDescription || error)
     return NextResponse.redirect(redirectUrl)
@@ -32,7 +44,7 @@ export async function GET(request: NextRequest) {
   // Validate required parameters
   if (!code || !state) {
     console.error('Whoop callback missing code or state')
-    const redirectUrl = new URL('/settings', request.url)
+    const redirectUrl = new URL('/settings', getBaseUrl(request))
     redirectUrl.searchParams.set('whoop', 'error')
     redirectUrl.searchParams.set('message', 'Missing authorization code or state')
     return NextResponse.redirect(redirectUrl)
@@ -43,7 +55,7 @@ export async function GET(request: NextRequest) {
   const userId = stateParts[1]
   if (stateParts.length !== 2 || !userId) {
     console.error('Whoop callback invalid state format')
-    const redirectUrl = new URL('/settings', request.url)
+    const redirectUrl = new URL('/settings', getBaseUrl(request))
     redirectUrl.searchParams.set('whoop', 'error')
     redirectUrl.searchParams.set('message', 'Invalid state parameter')
     return NextResponse.redirect(redirectUrl)
@@ -57,7 +69,7 @@ export async function GET(request: NextRequest) {
 
   if (!user) {
     console.error('Whoop callback user not found:', userId)
-    const redirectUrl = new URL('/settings', request.url)
+    const redirectUrl = new URL('/settings', getBaseUrl(request))
     redirectUrl.searchParams.set('whoop', 'error')
     redirectUrl.searchParams.set('message', 'User not found')
     return NextResponse.redirect(redirectUrl)
@@ -93,13 +105,13 @@ export async function GET(request: NextRequest) {
     console.log('Whoop callback: Connection saved successfully')
 
     // Redirect to settings with success
-    const redirectUrl = new URL('/settings', request.url)
+    const redirectUrl = new URL('/settings', getBaseUrl(request))
     redirectUrl.searchParams.set('whoop', 'connected')
     return NextResponse.redirect(redirectUrl)
   } catch (err) {
     console.error('Whoop callback error:', err)
     console.error('Whoop callback error details:', JSON.stringify(err, Object.getOwnPropertyNames(err)))
-    const redirectUrl = new URL('/settings', request.url)
+    const redirectUrl = new URL('/settings', getBaseUrl(request))
     redirectUrl.searchParams.set('whoop', 'error')
     redirectUrl.searchParams.set('message', 'Failed to complete authentication')
     return NextResponse.redirect(redirectUrl)
