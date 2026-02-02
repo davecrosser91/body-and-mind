@@ -50,29 +50,26 @@ interface TriggerTypeConfig {
 // Group trigger types by source
 const TRIGGER_TYPE_GROUPS: Array<{ label: string; types: TriggerTypeConfig[] }> = [
   {
-    label: 'Whoop Recovery',
+    label: 'Whoop Data',
     types: [
-      { type: 'WHOOP_RECOVERY_ABOVE', label: 'Recovery above %', needsThreshold: true, unit: '%', defaultValue: 60 },
-      { type: 'WHOOP_RECOVERY_BELOW', label: 'Recovery below %', needsThreshold: true, unit: '%', defaultValue: 50 },
-    ],
-  },
-  {
-    label: 'Whoop Sleep',
-    types: [
-      { type: 'WHOOP_SLEEP_ABOVE', label: 'Sleep more than hours', needsThreshold: true, unit: 'hours', defaultValue: 7 },
-    ],
-  },
-  {
-    label: 'Whoop Workout',
-    types: [
+      { type: 'WHOOP_RECOVERY_ABOVE', label: 'Recovery above', needsThreshold: true, unit: '%', defaultValue: 60 },
+      { type: 'WHOOP_RECOVERY_BELOW', label: 'Recovery below', needsThreshold: true, unit: '%', defaultValue: 50 },
+      { type: 'WHOOP_SLEEP_ABOVE', label: 'Sleep more than', needsThreshold: true, unit: 'hours', defaultValue: 7 },
       { type: 'WHOOP_STRAIN_ABOVE', label: 'Strain above', needsThreshold: true, unit: 'strain', defaultValue: 10 },
-      { type: 'WHOOP_WORKOUT_TYPE', label: 'Workout type logged', needsWorkoutType: true },
+      { type: 'WHOOP_WORKOUT_TYPE', label: 'Workout logged', needsWorkoutType: true },
+    ],
+  },
+  {
+    label: 'Nutrition',
+    types: [
+      { type: 'NUTRITION_PROTEIN_ABOVE', label: 'Protein above', needsThreshold: true, unit: 'g', defaultValue: 100 },
+      { type: 'NUTRITION_HEALTHY_MEALS', label: 'Healthy meals', needsThreshold: true, unit: 'meals', defaultValue: 2 },
     ],
   },
   {
     label: 'Activity',
     types: [
-      { type: 'ACTIVITY_COMPLETED', label: 'When activity completed', needsActivity: true },
+      { type: 'ACTIVITY_COMPLETED', label: 'Activity completed', needsActivity: true },
     ],
   },
 ]
@@ -249,7 +246,7 @@ export function AutoTriggerSection({
                       value={trigger.thresholdValue ?? ''}
                       onChange={(e) => handleThresholdChange(parseFloat(e.target.value) || 0)}
                       min={0}
-                      max={currentConfig.unit === '%' ? 100 : currentConfig.unit === 'strain' ? 21 : 24}
+                      max={currentConfig.unit === '%' ? 100 : currentConfig.unit === 'strain' ? 21 : currentConfig.unit === 'g' ? 300 : currentConfig.unit === 'meals' ? 3 : 24}
                       step={currentConfig.unit === 'hours' ? 0.5 : 1}
                       className="flex-1 px-4 py-3 bg-surface-light border border-surface-lighter rounded-xl
                         text-text-primary
@@ -270,6 +267,10 @@ export function AutoTriggerSection({
                       'This habit will auto-complete when your Whoop sleep is at or above this many hours'}
                     {trigger.triggerType === 'WHOOP_STRAIN_ABOVE' &&
                       'This habit will auto-complete when your Whoop strain reaches this level'}
+                    {trigger.triggerType === 'NUTRITION_PROTEIN_ABOVE' &&
+                      'This habit will auto-complete when you log this many grams of protein'}
+                    {trigger.triggerType === 'NUTRITION_HEALTHY_MEALS' &&
+                      'This habit will auto-complete when you log this many healthy meals (2 = majority)'}
                   </p>
                 </motion.div>
               )}
