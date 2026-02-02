@@ -255,6 +255,8 @@ export const POST = requireAuth(async (request: NextRequest, { user }) => {
         'WHOOP_RECOVERY_BELOW',
         'WHOOP_SLEEP_ABOVE',
         'WHOOP_STRAIN_ABOVE',
+        'NUTRITION_PROTEIN_ABOVE',
+        'NUTRITION_HEALTHY_MEALS',
       ]
       if (numericTriggerTypes.includes(autoTrigger.triggerType as AutoTriggerType)) {
         if (autoTrigger.thresholdValue === undefined || autoTrigger.thresholdValue === null) {
