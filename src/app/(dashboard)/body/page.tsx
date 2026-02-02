@@ -18,6 +18,7 @@ import type { CustomSubcategory } from '@/components/subcategories';
 import { QuickLogChips, ActivityDetailModal } from '@/components/activities';
 import { ActivityLogModal } from '@/components/activities/ActivityLogModal';
 import { TrainingLogModal } from '@/components/training';
+import { RecoveryCard, SleepCard, TrainingCard } from '@/components/whoop';
 import { PREDEFINED_SUBCATEGORIES, getSubcategoryConfig, getSubcategoriesForPillar } from '@/lib/subcategories';
 import { POINTS_THRESHOLD } from '@/lib/points';
 import { useAuth } from '@/hooks/useAuth';
@@ -79,6 +80,13 @@ interface DailyStatusData {
     atRisk: boolean;
     hoursRemaining: number;
   };
+  recovery: {
+    score: number | null;
+    zone: 'green' | 'yellow' | 'red' | null;
+    recommendation: string | null;
+    hrv: number | null;
+    restingHeartRate: number | null;
+  } | null;
   whoop: {
     connected: boolean;
     lastSync: string | null;
@@ -582,6 +590,39 @@ export default function BodyPage() {
           </motion.div>
         )}
       </motion.section>
+
+      {/* Whoop Data Section - Recovery, Sleep, Training */}
+      {dailyStatus?.whoop?.connected && isToday && (
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="space-y-3"
+        >
+          {/* Recovery Card */}
+          {dailyStatus.recovery && dailyStatus.recovery.score !== null && dailyStatus.recovery.zone && (
+            <RecoveryCard
+              data={{
+                score: dailyStatus.recovery.score,
+                zone: dailyStatus.recovery.zone,
+                hrv: dailyStatus.recovery.hrv,
+                restingHeartRate: dailyStatus.recovery.restingHeartRate,
+                recommendation: dailyStatus.recovery.recommendation,
+              }}
+            />
+          )}
+
+          {/* Sleep Card */}
+          {dailyStatus.whoop.sleep && (
+            <SleepCard data={dailyStatus.whoop.sleep} />
+          )}
+
+          {/* Training/Strain Card */}
+          {dailyStatus.whoop.training && dailyStatus.whoop.training.workouts.length > 0 && (
+            <TrainingCard data={dailyStatus.whoop.training} />
+          )}
+        </motion.section>
+      )}
 
       {/* SubCategory Tabs */}
       <motion.section

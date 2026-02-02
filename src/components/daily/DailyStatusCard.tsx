@@ -26,7 +26,7 @@ export function DailyStatusCard({
   className = '',
 }: DailyStatusCardProps) {
   return (
-    <GlassCard hover={false} className={`p-6 ${className}`}>
+    <GlassCard hover={false} className={`p-6 pb-10 ${className}`}>
       <div className="flex items-center justify-around gap-4">
         {/* Body Ring */}
         <PillarRing
@@ -57,12 +57,13 @@ interface PillarRingProps {
 
 function PillarRing({ pillar, status, onClick }: PillarRingProps) {
   const { completed, score, activities } = status;
+  const textColor = pillar === 'body' ? 'text-body' : 'text-mind';
 
   return (
     <motion.div
-      className="relative cursor-pointer"
+      className="relative cursor-pointer group"
       onClick={onClick}
-      whileHover={{ scale: 1.05 }}
+      whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
       transition={{ duration: 0.2 }}
     >
@@ -88,6 +89,14 @@ function PillarRing({ pillar, status, onClick }: PillarRingProps) {
           <ActivityBadge count={activities} pillar={pillar} />
         ) : null}
       </motion.div>
+
+      {/* View link - clickable affordance */}
+      <div className={`absolute -bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-1 ${textColor} opacity-60 group-hover:opacity-100 transition-opacity`}>
+        <span className="text-xs font-medium">View</span>
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
     </motion.div>
   );
 }

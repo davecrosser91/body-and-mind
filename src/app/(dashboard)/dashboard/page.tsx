@@ -29,8 +29,8 @@ import { JournalingLogModal } from '@/components/journaling/JournalingLogModal';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { EmberBar } from '@/components/scores/EmberBar';
 
-// Whoop components
-import { RecoveryCard, RecoveryCardCompact, SleepCard, TrainingCard, StrainCardCompact, WhoopConnectedCard } from '@/components/whoop';
+// Whoop components (keeping for potential future use)
+// import { RecoveryCard, RecoveryCardCompact, SleepCard, TrainingCard, StrainCardCompact, WhoopConnectedCard } from '@/components/whoop';
 
 // Auth
 import { useAuth } from '@/hooks/useAuth';
@@ -483,79 +483,6 @@ export default function DashboardPage() {
           onMindClick={handleMindClick}
         />
       </motion.section>
-
-      {/* Whoop Data Cards (if connected) */}
-      {dailyStatus?.whoop?.connected && (
-        <>
-          {/* Show "Whoop Connected" if no data available */}
-          {!dailyStatus?.recovery?.score && !dailyStatus.whoop.sleep && !dailyStatus.whoop.training?.workouts?.length && (
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 }}
-            >
-              <WhoopConnectedCard lastSync={dailyStatus.whoop.lastSync} />
-            </motion.section>
-          )}
-
-          {/* Strain & Recovery Row */}
-          {((dailyStatus.whoop.training?.strain ?? 0) > 0 || (dailyStatus?.recovery && dailyStatus.recovery.score !== null)) && (
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 }}
-              className="grid grid-cols-2 gap-3"
-            >
-              {/* Strain on left */}
-              {dailyStatus.whoop.training && dailyStatus.whoop.training.strain > 0 ? (
-                <StrainCardCompact data={dailyStatus.whoop.training} />
-              ) : (
-                <div className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5 flex items-center justify-center">
-                  <p className="text-sm text-text-muted">No strain data</p>
-                </div>
-              )}
-              {/* Recovery on right */}
-              {dailyStatus?.recovery && dailyStatus.recovery.score !== null && dailyStatus.recovery.zone ? (
-                <RecoveryCardCompact
-                  data={{
-                    score: dailyStatus.recovery.score,
-                    zone: dailyStatus.recovery.zone,
-                    hrv: dailyStatus.recovery.hrv,
-                    restingHeartRate: dailyStatus.recovery.restingHeartRate,
-                    recommendation: dailyStatus.recovery.recommendation,
-                  }}
-                />
-              ) : (
-                <div className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5 flex items-center justify-center">
-                  <p className="text-sm text-text-muted">No recovery data</p>
-                </div>
-              )}
-            </motion.section>
-          )}
-
-          {/* Sleep Card */}
-          {dailyStatus.whoop.sleep && (
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.28 }}
-            >
-              <SleepCard data={dailyStatus.whoop.sleep} />
-            </motion.section>
-          )}
-
-          {/* Training Card (workout details) */}
-          {dailyStatus.whoop.training && dailyStatus.whoop.training.workouts.length > 0 && (
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.31 }}
-            >
-              <TrainingCard data={dailyStatus.whoop.training} />
-            </motion.section>
-          )}
-        </>
-      )}
 
       {/* Quick Actions (if streak at risk) */}
       {streakAtRisk && quickActions.length > 0 && (

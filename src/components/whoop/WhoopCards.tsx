@@ -38,11 +38,11 @@ interface TrainingData {
 function getZoneColor(zone: 'green' | 'yellow' | 'red') {
   switch (zone) {
     case 'green':
-      return { bg: '#10B981', text: 'text-emerald-400', label: 'Recovered' };
+      return { bg: '#10B981', text: 'text-emerald-400', badgeBg: 'bg-emerald-500/20', label: 'Recovered' };
     case 'yellow':
-      return { bg: '#F59E0B', text: 'text-amber-400', label: 'Recovering' };
+      return { bg: '#F59E0B', text: 'text-amber-300', badgeBg: 'bg-amber-500/20', label: 'Recovering' };
     case 'red':
-      return { bg: '#EF4444', text: 'text-red-400', label: 'Strained' };
+      return { bg: '#EF4444', text: 'text-red-400', badgeBg: 'bg-red-500/20', label: 'Strained' };
   }
 }
 
@@ -130,7 +130,7 @@ export function RecoveryCard({ data }: { data: RecoveryData }) {
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="text-lg font-semibold text-text-primary">Recovery</h3>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${zone.text} bg-white/5`}>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${zone.text} ${zone.badgeBg}`}>
               {zone.label}
             </span>
           </div>
@@ -365,7 +365,7 @@ export function RecoveryCardCompact({ data }: { data: RecoveryData }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="text-base font-semibold text-text-primary">Recovery</h3>
-            <span className={`text-xs px-1.5 py-0.5 rounded-full ${zone.text} bg-white/5`}>
+            <span className={`text-xs px-1.5 py-0.5 rounded-full ${zone.text} ${zone.badgeBg}`}>
               {zone.label}
             </span>
           </div>
