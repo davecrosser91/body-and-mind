@@ -1,50 +1,43 @@
 /**
- * OpenAPI/Swagger specification for the Routine Game API
+ * OpenAPI/Swagger specification for the Bodylessness API
+ * Updated 2025 - Activities-based architecture
  */
 export const openApiSpec = {
   openapi: '3.0.3',
   info: {
-    title: 'Routine Game API',
+    title: 'Bodylessness API',
     description:
-      'API for the Routine Game - a gamified habit-tracking application with Habitanimal companions',
-    version: '1.0.0',
+      'API for Bodylessness - a habit tracking app with Body & Mind pillars, activities, stacks, and Whoop integration',
+    version: '2.0.0',
     contact: {
-      name: 'Routine Game Support',
+      name: 'Bodylessness Support',
     },
   },
   servers: [
     {
-      url: '/api/v1',
-      description: 'API v1',
+      url: 'https://habits.bodylessness.com/api/v1',
+      description: 'Production server',
+    },
+    {
+      url: 'http://localhost:3000/api/v1',
+      description: 'Development server',
     },
   ],
   tags: [
-    {
-      name: 'Auth',
-      description: 'Authentication endpoints',
-    },
-    {
-      name: 'Habits',
-      description: 'Habit management endpoints',
-    },
-    {
-      name: 'Habitanimals',
-      description: 'Habitanimal companion endpoints',
-    },
-    {
-      name: 'Dashboard',
-      description: 'Dashboard and statistics endpoints',
-    },
-    {
-      name: 'Integrations',
-      description: 'Third-party integration endpoints',
-    },
-    {
-      name: 'Health',
-      description: 'API health check endpoints',
-    },
+    { name: 'Auth', description: 'Authentication endpoints' },
+    { name: 'Activities', description: 'Activity management (habits and one-off activities)' },
+    { name: 'Activity Logs', description: 'Activity completion logging' },
+    { name: 'Stacks', description: 'Habit stacks (chained activities)' },
+    { name: 'Streaks', description: 'Streak tracking' },
+    { name: 'Daily Scores', description: 'Daily score history and analytics' },
+    { name: 'Nutrition', description: 'Nutrition tracking' },
+    { name: 'Training', description: 'Training templates and workouts' },
+    { name: 'Journal', description: 'Journal entries' },
+    { name: 'Whoop', description: 'Whoop integration' },
+    { name: 'Health', description: 'API health check' },
   ],
   paths: {
+    // ==================== Health ====================
     '/health': {
       get: {
         tags: ['Health'],
@@ -58,14 +51,8 @@ export const openApiSpec = {
                 schema: {
                   type: 'object',
                   properties: {
-                    status: {
-                      type: 'string',
-                      example: 'ok',
-                    },
-                    timestamp: {
-                      type: 'number',
-                      example: 1704067200000,
-                    },
+                    status: { type: 'string', example: 'ok' },
+                    timestamp: { type: 'number' },
                   },
                 },
               },
@@ -74,18 +61,17 @@ export const openApiSpec = {
         },
       },
     },
+
+    // ==================== Auth ====================
     '/auth/signup': {
       post: {
         tags: ['Auth'],
         summary: 'Register a new user',
-        description: 'Create a new user account',
         requestBody: {
           required: true,
           content: {
             'application/json': {
-              schema: {
-                $ref: '#/components/schemas/SignupRequest',
-              },
+              schema: { $ref: '#/components/schemas/SignupRequest' },
             },
           },
         },
@@ -94,32 +80,12 @@ export const openApiSpec = {
             description: 'User created successfully',
             content: {
               'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/AuthResponse',
-                },
+                schema: { $ref: '#/components/schemas/AuthResponse' },
               },
             },
           },
-          '400': {
-            description: 'Validation error',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '409': {
-            description: 'User already exists',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
+          '400': { description: 'Validation error' },
+          '409': { description: 'User already exists' },
         },
       },
     },
@@ -127,14 +93,11 @@ export const openApiSpec = {
       post: {
         tags: ['Auth'],
         summary: 'Login',
-        description: 'Authenticate a user and receive a JWT token',
         requestBody: {
           required: true,
           content: {
             'application/json': {
-              schema: {
-                $ref: '#/components/schemas/LoginRequest',
-              },
+              schema: { $ref: '#/components/schemas/LoginRequest' },
             },
           },
         },
@@ -143,22 +106,11 @@ export const openApiSpec = {
             description: 'Login successful',
             content: {
               'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/AuthResponse',
-                },
+                schema: { $ref: '#/components/schemas/AuthResponse' },
               },
             },
           },
-          '401': {
-            description: 'Invalid credentials',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
+          '401': { description: 'Invalid credentials' },
         },
       },
     },
@@ -166,44 +118,9 @@ export const openApiSpec = {
       post: {
         tags: ['Auth'],
         summary: 'Logout',
-        description: 'Logout the current user (client should remove stored token)',
-        security: [{ bearerAuth: [] }],
+        security: [{ cookieAuth: [] }],
         responses: {
-          '200': {
-            description: 'Logout successful',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    success: {
-                      type: 'boolean',
-                      example: true,
-                    },
-                    data: {
-                      type: 'object',
-                      properties: {
-                        message: {
-                          type: 'string',
-                          example: 'Logged out successfully',
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
+          '200': { description: 'Logout successful' },
         },
       },
     },
@@ -211,845 +128,701 @@ export const openApiSpec = {
       get: {
         tags: ['Auth'],
         summary: 'Get current user',
-        description: 'Get the profile of the currently authenticated user',
-        security: [{ bearerAuth: [] }],
+        security: [{ cookieAuth: [] }],
         responses: {
           '200': {
             description: 'User profile',
             content: {
               'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/UserProfileResponse',
-                },
+                schema: { $ref: '#/components/schemas/UserResponse' },
               },
             },
           },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
+          '401': { description: 'Unauthorized' },
         },
       },
       patch: {
         tags: ['Auth'],
         summary: 'Update profile',
-        description: 'Update the current user profile. Can update name and/or password.',
-        security: [{ bearerAuth: [] }],
+        security: [{ cookieAuth: [] }],
         requestBody: {
-          required: true,
           content: {
             'application/json': {
-              schema: {
-                $ref: '#/components/schemas/UpdateProfileRequest',
-              },
+              schema: { $ref: '#/components/schemas/UpdateProfileRequest' },
             },
           },
         },
         responses: {
-          '200': {
-            description: 'Profile updated',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/UserProfileResponse',
-                },
-              },
-            },
-          },
-          '400': {
-            description: 'Validation error',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized or invalid current password',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
+          '200': { description: 'Profile updated' },
+          '401': { description: 'Unauthorized' },
         },
       },
     },
-    '/habits': {
+
+    // ==================== Activities ====================
+    '/activities': {
       get: {
-        tags: ['Habits'],
-        summary: 'List habits',
-        description: 'Get all habits for the authenticated user',
-        security: [{ bearerAuth: [] }],
+        tags: ['Activities'],
+        summary: 'List all activities',
+        description: 'Returns all non-archived activities for the authenticated user',
+        security: [{ cookieAuth: [] }],
         parameters: [
           {
-            name: 'habitanimalId',
+            name: 'pillar',
             in: 'query',
-            description: 'Filter by habitanimal ID',
-            schema: {
-              type: 'string',
-              format: 'uuid',
-            },
+            description: 'Filter by pillar',
+            schema: { type: 'string', enum: ['BODY', 'MIND'] },
           },
           {
-            name: 'frequency',
+            name: 'subCategory',
             in: 'query',
-            description: 'Filter by frequency',
-            schema: {
-              type: 'string',
-              enum: ['daily', 'weekly', 'monthly'],
-            },
+            description: 'Filter by subcategory (TRAINING, SLEEP, NUTRITION, MEDITATION, READING, LEARNING, JOURNALING)',
+            schema: { type: 'string' },
           },
           {
-            name: 'page',
+            name: 'habitsOnly',
             in: 'query',
-            description: 'Page number',
-            schema: {
-              type: 'integer',
-              default: 1,
-              minimum: 1,
-            },
-          },
-          {
-            name: 'pageSize',
-            in: 'query',
-            description: 'Items per page',
-            schema: {
-              type: 'integer',
-              default: 20,
-              minimum: 1,
-              maximum: 100,
-            },
+            description: 'Only return activities where isHabit=true',
+            schema: { type: 'string', enum: ['true', 'false'] },
           },
         ],
         responses: {
           '200': {
-            description: 'List of habits',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/HabitListResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-      post: {
-        tags: ['Habits'],
-        summary: 'Create habit',
-        description: 'Create a new habit',
-        security: [{ bearerAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                $ref: '#/components/schemas/CreateHabitRequest',
-              },
-            },
-          },
-        },
-        responses: {
-          '201': {
-            description: 'Habit created',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/HabitResponse',
-                },
-              },
-            },
-          },
-          '400': {
-            description: 'Validation error',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/habits/{id}': {
-      get: {
-        tags: ['Habits'],
-        summary: 'Get habit',
-        description: 'Get a specific habit by ID',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            description: 'Habit ID',
-            schema: {
-              type: 'string',
-              format: 'uuid',
-            },
-          },
-        ],
-        responses: {
-          '200': {
-            description: 'Habit details',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/HabitResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '404': {
-            description: 'Habit not found',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-      patch: {
-        tags: ['Habits'],
-        summary: 'Update habit',
-        description: 'Update a habit',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            description: 'Habit ID',
-            schema: {
-              type: 'string',
-              format: 'uuid',
-            },
-          },
-        ],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                $ref: '#/components/schemas/UpdateHabitRequest',
-              },
-            },
-          },
-        },
-        responses: {
-          '200': {
-            description: 'Habit updated',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/HabitResponse',
-                },
-              },
-            },
-          },
-          '400': {
-            description: 'Validation error',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '404': {
-            description: 'Habit not found',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-      delete: {
-        tags: ['Habits'],
-        summary: 'Delete habit',
-        description: 'Delete a habit',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            description: 'Habit ID',
-            schema: {
-              type: 'string',
-              format: 'uuid',
-            },
-          },
-        ],
-        responses: {
-          '204': {
-            description: 'Habit deleted',
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '404': {
-            description: 'Habit not found',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/habits/{id}/complete': {
-      post: {
-        tags: ['Habits'],
-        summary: 'Complete habit',
-        description: 'Mark a habit as completed and earn XP',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            description: 'Habit ID',
-            schema: {
-              type: 'string',
-              format: 'uuid',
-            },
-          },
-        ],
-        responses: {
-          '201': {
-            description: 'Habit completed',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/HabitCompletionResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '404': {
-            description: 'Habit not found',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/habitanimals': {
-      get: {
-        tags: ['Habitanimals'],
-        summary: 'List habitanimals',
-        description: 'Get all habitanimals for the authenticated user',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'page',
-            in: 'query',
-            description: 'Page number',
-            schema: {
-              type: 'integer',
-              default: 1,
-              minimum: 1,
-            },
-          },
-          {
-            name: 'pageSize',
-            in: 'query',
-            description: 'Items per page',
-            schema: {
-              type: 'integer',
-              default: 20,
-              minimum: 1,
-              maximum: 100,
-            },
-          },
-        ],
-        responses: {
-          '200': {
-            description: 'List of habitanimals',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/HabitanimalListResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-      post: {
-        tags: ['Habitanimals'],
-        summary: 'Create habitanimal',
-        description: 'Create a new habitanimal',
-        security: [{ bearerAuth: [] }],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                $ref: '#/components/schemas/CreateHabitanimalRequest',
-              },
-            },
-          },
-        },
-        responses: {
-          '201': {
-            description: 'Habitanimal created',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/HabitanimalResponse',
-                },
-              },
-            },
-          },
-          '400': {
-            description: 'Validation error',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/habitanimals/{id}': {
-      get: {
-        tags: ['Habitanimals'],
-        summary: 'Get habitanimal',
-        description: 'Get a specific habitanimal by ID',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            description: 'Habitanimal ID',
-            schema: {
-              type: 'string',
-              format: 'uuid',
-            },
-          },
-        ],
-        responses: {
-          '200': {
-            description: 'Habitanimal details',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/HabitanimalResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '404': {
-            description: 'Habitanimal not found',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-      patch: {
-        tags: ['Habitanimals'],
-        summary: 'Update habitanimal',
-        description: 'Update a habitanimal',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            description: 'Habitanimal ID',
-            schema: {
-              type: 'string',
-              format: 'uuid',
-            },
-          },
-        ],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: {
-                $ref: '#/components/schemas/UpdateHabitanimalRequest',
-              },
-            },
-          },
-        },
-        responses: {
-          '200': {
-            description: 'Habitanimal updated',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/HabitanimalResponse',
-                },
-              },
-            },
-          },
-          '400': {
-            description: 'Validation error',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '404': {
-            description: 'Habitanimal not found',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-      delete: {
-        tags: ['Habitanimals'],
-        summary: 'Delete habitanimal',
-        description: 'Delete a habitanimal and all associated habits',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            description: 'Habitanimal ID',
-            schema: {
-              type: 'string',
-              format: 'uuid',
-            },
-          },
-        ],
-        responses: {
-          '204': {
-            description: 'Habitanimal deleted',
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '404': {
-            description: 'Habitanimal not found',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/habitanimals/{id}/history': {
-      get: {
-        tags: ['Habitanimals'],
-        summary: 'Get habitanimal history',
-        description: 'Get detailed health and XP history for a habitanimal over time',
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            description: 'Habitanimal ID',
-            schema: {
-              type: 'string',
-              format: 'uuid',
-            },
-          },
-          {
-            name: 'days',
-            in: 'query',
-            description: 'Number of days of history to fetch',
-            schema: {
-              type: 'integer',
-              default: 30,
-              minimum: 1,
-              maximum: 365,
-            },
-          },
-        ],
-        responses: {
-          '200': {
-            description: 'Habitanimal history',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/HabitanimalHistoryResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '404': {
-            description: 'Habitanimal not found',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/habitanimals/recalculate-health': {
-      post: {
-        tags: ['Habitanimals'],
-        summary: 'Recalculate habitanimal health',
-        description: 'Recalculate health for all user habitanimals based on last interaction date',
-        security: [{ bearerAuth: [] }],
-        responses: {
-          '200': {
-            description: 'Health recalculated',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/HealthRecalculationResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/dashboard': {
-      get: {
-        tags: ['Dashboard'],
-        summary: 'Get dashboard data',
-        description:
-          'Get aggregated dashboard data including stats and recent activity',
-        security: [{ bearerAuth: [] }],
-        responses: {
-          '200': {
-            description: 'Dashboard data',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/DashboardResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/integrations/whoop/connect': {
-      post: {
-        tags: ['Integrations'],
-        summary: 'Connect WHOOP',
-        description: 'Initialize WHOOP OAuth connection',
-        security: [{ bearerAuth: [] }],
-        responses: {
-          '200': {
-            description: 'OAuth URL returned',
+            description: 'List of activities',
             content: {
               'application/json': {
                 schema: {
                   type: 'object',
                   properties: {
-                    success: {
-                      type: 'boolean',
-                      example: true,
-                    },
+                    success: { type: 'boolean' },
                     data: {
-                      type: 'object',
-                      properties: {
-                        authUrl: {
-                          type: 'string',
-                          format: 'uri',
-                        },
-                      },
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/Activity' },
                     },
                   },
                 },
               },
             },
           },
-          '401': {
-            description: 'Unauthorized',
+        },
+      },
+      post: {
+        tags: ['Activities'],
+        summary: 'Create a new activity',
+        security: [{ cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CreateActivityRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': {
+            description: 'Activity created',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ActivityResponse' },
+              },
+            },
+          },
+          '400': { description: 'Validation error' },
+        },
+      },
+    },
+    '/activities/{id}': {
+      get: {
+        tags: ['Activities'],
+        summary: 'Get activity by ID',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': { description: 'Activity details' },
+          '404': { description: 'Activity not found' },
+        },
+      },
+      patch: {
+        tags: ['Activities'],
+        summary: 'Update activity',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/UpdateActivityRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Activity updated' },
+          '404': { description: 'Activity not found' },
+        },
+      },
+      delete: {
+        tags: ['Activities'],
+        summary: 'Archive activity',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '204': { description: 'Activity archived' },
+          '404': { description: 'Activity not found' },
+        },
+      },
+    },
+    '/activities/{id}/complete': {
+      post: {
+        tags: ['Activities'],
+        summary: 'Complete an activity with details',
+        description: 'Log a detailed activity completion (for training, meditation, journaling, etc.)',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        requestBody: {
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CompleteActivityRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': { description: 'Activity completed' },
+          '404': { description: 'Activity not found' },
+          '409': { description: 'Already completed today (for habits)' },
+        },
+      },
+    },
+    '/activities/{id}/trigger': {
+      post: {
+        tags: ['Activities'],
+        summary: 'Manually trigger auto-completion',
+        description: 'Manually trigger an activity that has auto-trigger configured',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '201': { description: 'Activity triggered' },
+          '404': { description: 'Activity not found' },
+        },
+      },
+    },
+
+    // ==================== Activity Logs ====================
+    '/activity-logs': {
+      get: {
+        tags: ['Activity Logs'],
+        summary: 'Get activity completions for a date',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          {
+            name: 'date',
+            in: 'query',
+            description: 'Date in YYYY-MM-DD format (defaults to today)',
+            schema: { type: 'string', format: 'date' },
+          },
+          {
+            name: 'pillar',
+            in: 'query',
+            schema: { type: 'string', enum: ['BODY', 'MIND'] },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'List of activity completions',
             content: {
               'application/json': {
                 schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/ActivityLog' },
+                    },
+                  },
                 },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ['Activity Logs'],
+        summary: 'Quick log an activity',
+        description: 'Simple completion without additional details',
+        security: [{ cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['activityId'],
+                properties: {
+                  activityId: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '201': { description: 'Activity logged' },
+          '404': { description: 'Activity not found' },
+          '409': { description: 'Already completed today' },
+        },
+      },
+    },
+
+    // ==================== Stacks ====================
+    '/stacks': {
+      get: {
+        tags: ['Stacks'],
+        summary: 'List habit stacks',
+        description: 'Returns all habit stacks for the authenticated user',
+        security: [{ cookieAuth: [] }],
+        responses: {
+          '200': {
+            description: 'List of stacks',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/StacksResponse' },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ['Stacks'],
+        summary: 'Create a habit stack',
+        security: [{ cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CreateStackRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': { description: 'Stack created' },
+          '400': { description: 'Validation error' },
+        },
+      },
+    },
+    '/stacks/{id}': {
+      get: {
+        tags: ['Stacks'],
+        summary: 'Get stack by ID',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': { description: 'Stack details' },
+          '404': { description: 'Stack not found' },
+        },
+      },
+      patch: {
+        tags: ['Stacks'],
+        summary: 'Update stack',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': { description: 'Stack updated' },
+        },
+      },
+      delete: {
+        tags: ['Stacks'],
+        summary: 'Delete stack',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '204': { description: 'Stack deleted' },
+        },
+      },
+    },
+    '/stacks/{id}/execute': {
+      post: {
+        tags: ['Stacks'],
+        summary: 'Execute a habit stack',
+        description: 'Complete all activities in a stack and earn bonus points',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': { description: 'Stack executed' },
+          '404': { description: 'Stack not found' },
+        },
+      },
+    },
+
+    // ==================== Streaks ====================
+    '/streaks': {
+      get: {
+        tags: ['Streaks'],
+        summary: 'Get streak information',
+        description: 'Returns streak data for OVERALL, BODY, and MIND pillars',
+        security: [{ cookieAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Streak data',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/StreaksResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+
+    // ==================== Daily Scores ====================
+    '/daily-scores': {
+      get: {
+        tags: ['Daily Scores'],
+        summary: 'Get historical daily scores',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          {
+            name: 'days',
+            in: 'query',
+            description: 'Number of days to fetch (default: 7, max: 365)',
+            schema: { type: 'integer', default: 7, maximum: 365 },
+          },
+          {
+            name: 'startDate',
+            in: 'query',
+            description: 'Start date in YYYY-MM-DD format',
+            schema: { type: 'string', format: 'date' },
+          },
+          {
+            name: 'endDate',
+            in: 'query',
+            description: 'End date in YYYY-MM-DD format',
+            schema: { type: 'string', format: 'date' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Daily scores with summary',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/DailyScoresResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+
+    // ==================== Daily Status ====================
+    '/daily-status': {
+      get: {
+        tags: ['Daily Scores'],
+        summary: 'Get today\'s status',
+        description: 'Returns current day progress, scores, and completion status',
+        security: [{ cookieAuth: [] }],
+        responses: {
+          '200': { description: 'Daily status' },
+        },
+      },
+    },
+
+    // ==================== Nutrition ====================
+    '/nutrition': {
+      get: {
+        tags: ['Nutrition'],
+        summary: 'Get nutrition log for a date',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          {
+            name: 'date',
+            in: 'query',
+            description: 'Date in YYYY-MM-DD format (defaults to today)',
+            schema: { type: 'string', format: 'date' },
+          },
+        ],
+        responses: {
+          '200': {
+            description: 'Nutrition data',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/NutritionResponse' },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ['Nutrition'],
+        summary: 'Save nutrition log',
+        security: [{ cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/NutritionRequest' },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Nutrition saved' },
+        },
+      },
+    },
+
+    // ==================== Training ====================
+    '/training/templates': {
+      get: {
+        tags: ['Training'],
+        summary: 'List training templates',
+        security: [{ cookieAuth: [] }],
+        responses: {
+          '200': {
+            description: 'List of training templates',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean' },
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/TrainingTemplate' },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      post: {
+        tags: ['Training'],
+        summary: 'Create training template',
+        security: [{ cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/CreateTrainingTemplateRequest' },
+            },
+          },
+        },
+        responses: {
+          '201': { description: 'Template created' },
+        },
+      },
+    },
+    '/training/templates/{id}': {
+      get: {
+        tags: ['Training'],
+        summary: 'Get training template',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': { description: 'Template details' },
+          '404': { description: 'Template not found' },
+        },
+      },
+      patch: {
+        tags: ['Training'],
+        summary: 'Update training template',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': { description: 'Template updated' },
+        },
+      },
+      delete: {
+        tags: ['Training'],
+        summary: 'Delete training template',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '204': { description: 'Template deleted' },
+        },
+      },
+    },
+    '/training/external-workouts': {
+      get: {
+        tags: ['Training'],
+        summary: 'Get external workouts',
+        description: 'Get workouts synced from Whoop that are not yet linked to activities',
+        security: [{ cookieAuth: [] }],
+        responses: {
+          '200': { description: 'List of external workouts' },
+        },
+      },
+    },
+    '/training/link-external': {
+      post: {
+        tags: ['Training'],
+        summary: 'Link external workout',
+        description: 'Link a Whoop workout to a training activity',
+        security: [{ cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['externalId', 'activityId'],
+                properties: {
+                  externalId: { type: 'string' },
+                  activityId: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': { description: 'Workout linked' },
+        },
+      },
+    },
+
+    // ==================== Journal ====================
+    '/journal/entries': {
+      get: {
+        tags: ['Journal'],
+        summary: 'Get journal entries',
+        description: 'Returns paginated journal entries',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 20, maximum: 100 } },
+          {
+            name: 'entryType',
+            in: 'query',
+            schema: { type: 'string', enum: ['GRATITUDE', 'REFLECTION', 'FREE_WRITE', 'GOALS', 'AFFIRMATION'] },
+          },
+          {
+            name: 'mood',
+            in: 'query',
+            schema: { type: 'string', enum: ['GREAT', 'GOOD', 'OKAY', 'LOW', 'BAD'] },
+          },
+          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'startDate', in: 'query', schema: { type: 'string', format: 'date' } },
+          { name: 'endDate', in: 'query', schema: { type: 'string', format: 'date' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Paginated journal entries',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/JournalEntriesResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/journal/entries/{id}': {
+      get: {
+        tags: ['Journal'],
+        summary: 'Get journal entry',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': { description: 'Journal entry details' },
+          '404': { description: 'Entry not found' },
+        },
+      },
+      patch: {
+        tags: ['Journal'],
+        summary: 'Update journal entry',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': { description: 'Entry updated' },
+        },
+      },
+      delete: {
+        tags: ['Journal'],
+        summary: 'Delete journal entry',
+        security: [{ cookieAuth: [] }],
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '204': { description: 'Entry deleted' },
+        },
+      },
+    },
+
+    // ==================== Whoop Integration ====================
+    '/integrations/whoop/connect': {
+      get: {
+        tags: ['Whoop'],
+        summary: 'Start Whoop OAuth flow',
+        description: 'Redirects to Whoop authorization page',
+        security: [{ cookieAuth: [] }],
+        responses: {
+          '302': { description: 'Redirect to Whoop authorization' },
+        },
+      },
+    },
+    '/integrations/whoop': {
+      get: {
+        tags: ['Whoop'],
+        summary: 'Get Whoop connection status',
+        security: [{ cookieAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Connection status',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/WhoopStatusResponse' },
+              },
+            },
+          },
+        },
+      },
+      delete: {
+        tags: ['Whoop'],
+        summary: 'Disconnect Whoop',
+        security: [{ cookieAuth: [] }],
+        responses: {
+          '204': { description: 'Disconnected' },
+        },
+      },
+    },
+    '/integrations/whoop/sync': {
+      post: {
+        tags: ['Whoop'],
+        summary: 'Sync Whoop data',
+        description: 'Manually trigger sync of recovery, sleep, and workout data from Whoop',
+        security: [{ cookieAuth: [] }],
+        responses: {
+          '200': {
+            description: 'Sync completed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/WhoopSyncResponse' },
               },
             },
           },
@@ -1058,214 +831,57 @@ export const openApiSpec = {
     },
     '/integrations/whoop/callback': {
       get: {
-        tags: ['Integrations'],
-        summary: 'WHOOP OAuth callback',
-        description: 'Handle WHOOP OAuth callback',
+        tags: ['Whoop'],
+        summary: 'Whoop OAuth callback',
+        description: 'Handles OAuth callback from Whoop (internal use)',
         parameters: [
-          {
-            name: 'code',
-            in: 'query',
-            required: true,
-            description: 'OAuth authorization code',
-            schema: {
-              type: 'string',
-            },
-          },
-          {
-            name: 'state',
-            in: 'query',
-            required: true,
-            description: 'OAuth state parameter',
-            schema: {
-              type: 'string',
-            },
-          },
+          { name: 'code', in: 'query', required: true, schema: { type: 'string' } },
+          { name: 'state', in: 'query', required: true, schema: { type: 'string' } },
         ],
         responses: {
-          '302': {
-            description: 'Redirect to app after successful connection',
-          },
-          '400': {
-            description: 'Invalid callback parameters',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/integrations/whoop': {
-      get: {
-        tags: ['Integrations'],
-        summary: 'Get WHOOP connection status',
-        description: 'Check if WHOOP is connected and get last sync time',
-        security: [{ bearerAuth: [] }],
-        responses: {
-          '200': {
-            description: 'Connection status',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/WhoopConnectionStatus',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-      delete: {
-        tags: ['Integrations'],
-        summary: 'Disconnect WHOOP',
-        description: 'Remove WHOOP integration',
-        security: [{ bearerAuth: [] }],
-        responses: {
-          '204': {
-            description: 'Disconnected successfully',
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '404': {
-            description: 'No WHOOP connection found',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    '/integrations/whoop/sync': {
-      post: {
-        tags: ['Integrations'],
-        summary: 'Sync WHOOP data',
-        description: 'Manually trigger sync of sleep and workout data from WHOOP',
-        security: [{ bearerAuth: [] }],
-        responses: {
-          '200': {
-            description: 'Sync completed',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/WhoopSyncResponse',
-                },
-              },
-            },
-          },
-          '401': {
-            description: 'Unauthorized',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
-          '404': {
-            description: 'No WHOOP connection found',
-            content: {
-              'application/json': {
-                schema: {
-                  $ref: '#/components/schemas/ErrorResponse',
-                },
-              },
-            },
-          },
+          '302': { description: 'Redirect to app settings' },
         },
       },
     },
   },
+
   components: {
     securitySchemes: {
-      bearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'JWT token obtained from /auth/login or /auth/signup',
+      cookieAuth: {
+        type: 'apiKey',
+        in: 'cookie',
+        name: 'session',
+        description: 'Session cookie from /auth/login',
       },
     },
     schemas: {
+      // ==================== Auth Schemas ====================
       SignupRequest: {
         type: 'object',
         required: ['email', 'password', 'name'],
         properties: {
-          email: {
-            type: 'string',
-            format: 'email',
-            example: 'user@example.com',
-          },
-          password: {
-            type: 'string',
-            format: 'password',
-            minLength: 8,
-            example: 'securePassword123',
-          },
-          name: {
-            type: 'string',
-            minLength: 1,
-            maxLength: 100,
-            example: 'John Doe',
-          },
+          email: { type: 'string', format: 'email' },
+          password: { type: 'string', minLength: 8 },
+          name: { type: 'string' },
         },
       },
       LoginRequest: {
         type: 'object',
         required: ['email', 'password'],
         properties: {
-          email: {
-            type: 'string',
-            format: 'email',
-            example: 'user@example.com',
-          },
-          password: {
-            type: 'string',
-            format: 'password',
-            example: 'securePassword123',
-          },
+          email: { type: 'string', format: 'email' },
+          password: { type: 'string' },
         },
       },
       AuthResponse: {
         type: 'object',
         properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
+          success: { type: 'boolean' },
           data: {
             type: 'object',
             properties: {
-              user: {
-                $ref: '#/components/schemas/User',
-              },
-              token: {
-                type: 'string',
-                description: 'JWT access token',
-              },
+              user: { $ref: '#/components/schemas/User' },
+              token: { type: 'string' },
             },
           },
         },
@@ -1273,649 +889,456 @@ export const openApiSpec = {
       User: {
         type: 'object',
         properties: {
-          id: {
-            type: 'string',
-            format: 'uuid',
-          },
-          email: {
-            type: 'string',
-            format: 'email',
-          },
-          name: {
-            type: 'string',
-            nullable: true,
-          },
-          createdAt: {
-            type: 'string',
-            format: 'date-time',
-          },
+          id: { type: 'string' },
+          email: { type: 'string', format: 'email' },
+          name: { type: 'string' },
+          createdAt: { type: 'string', format: 'date-time' },
         },
       },
-      UserProfileResponse: {
+      UserResponse: {
         type: 'object',
         properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          data: {
-            type: 'object',
-            properties: {
-              id: {
-                type: 'string',
-                format: 'uuid',
-              },
-              email: {
-                type: 'string',
-                format: 'email',
-              },
-              name: {
-                type: 'string',
-                nullable: true,
-              },
-              createdAt: {
-                type: 'string',
-                format: 'date-time',
-              },
-              habitanimalCount: {
-                type: 'integer',
-                example: 5,
-              },
-            },
-          },
+          success: { type: 'boolean' },
+          data: { $ref: '#/components/schemas/User' },
         },
       },
       UpdateProfileRequest: {
         type: 'object',
         properties: {
-          name: {
+          name: { type: 'string' },
+          currentPassword: { type: 'string' },
+          newPassword: { type: 'string', minLength: 8 },
+        },
+      },
+
+      // ==================== Activity Schemas ====================
+      Activity: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          pillar: { type: 'string', enum: ['BODY', 'MIND'] },
+          subCategory: { type: 'string' },
+          frequency: { type: 'string', enum: ['DAILY', 'WEEKLY', 'CUSTOM'] },
+          description: { type: 'string', nullable: true },
+          points: { type: 'integer' },
+          isHabit: { type: 'boolean' },
+          cueType: { type: 'string', enum: ['TIME', 'LOCATION', 'AFTER_ACTIVITY'], nullable: true },
+          cueValue: { type: 'string', nullable: true },
+          completedToday: { type: 'boolean' },
+          autoTrigger: { $ref: '#/components/schemas/AutoTrigger' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      AutoTrigger: {
+        type: 'object',
+        nullable: true,
+        properties: {
+          id: { type: 'string' },
+          triggerType: {
             type: 'string',
-            minLength: 1,
-            maxLength: 100,
+            enum: [
+              'WHOOP_RECOVERY_ABOVE',
+              'WHOOP_RECOVERY_BELOW',
+              'WHOOP_SLEEP_ABOVE',
+              'WHOOP_STRAIN_ABOVE',
+              'WHOOP_WORKOUT_TYPE',
+              'NUTRITION_PROTEIN_ABOVE',
+              'NUTRITION_HEALTHY_MEALS',
+              'ACTIVITY_COMPLETED',
+            ],
+          },
+          thresholdValue: { type: 'number', nullable: true },
+          workoutTypeId: { type: 'integer', nullable: true },
+          triggerActivityId: { type: 'string', nullable: true },
+          triggerActivityName: { type: 'string', nullable: true },
+          isActive: { type: 'boolean' },
+        },
+      },
+      CreateActivityRequest: {
+        type: 'object',
+        required: ['name', 'pillar', 'subCategory'],
+        properties: {
+          name: { type: 'string' },
+          pillar: { type: 'string', enum: ['BODY', 'MIND'] },
+          subCategory: { type: 'string' },
+          points: { type: 'integer', default: 25 },
+          isHabit: { type: 'boolean', default: false },
+          description: { type: 'string' },
+          frequency: { type: 'string', enum: ['DAILY', 'WEEKLY', 'CUSTOM'], default: 'DAILY' },
+          cueType: { type: 'string', enum: ['TIME', 'LOCATION', 'AFTER_ACTIVITY'] },
+          cueValue: { type: 'string' },
+          autoTrigger: {
+            type: 'object',
+            properties: {
+              triggerType: { type: 'string' },
+              thresholdValue: { type: 'number' },
+              workoutTypeId: { type: 'integer' },
+              triggerActivityId: { type: 'string' },
+            },
+          },
+        },
+      },
+      UpdateActivityRequest: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+          description: { type: 'string' },
+          points: { type: 'integer' },
+          isHabit: { type: 'boolean' },
+          cueType: { type: 'string', enum: ['TIME', 'LOCATION', 'AFTER_ACTIVITY'] },
+          cueValue: { type: 'string' },
+        },
+      },
+      ActivityResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean' },
+          data: { $ref: '#/components/schemas/Activity' },
+        },
+      },
+      CompleteActivityRequest: {
+        type: 'object',
+        properties: {
+          points: { type: 'integer', description: 'Override points earned' },
+          details: { type: 'string', description: 'Notes about the completion' },
+          meditationDetails: {
+            type: 'object',
+            properties: {
+              durationMinutes: { type: 'integer' },
+              technique: { type: 'string' },
+              moodBefore: { type: 'string', enum: ['GREAT', 'GOOD', 'OKAY', 'LOW', 'BAD'] },
+              moodAfter: { type: 'string', enum: ['GREAT', 'GOOD', 'OKAY', 'LOW', 'BAD'] },
+            },
+          },
+          journalEntry: {
+            type: 'object',
+            properties: {
+              entryType: { type: 'string', enum: ['GRATITUDE', 'REFLECTION', 'FREE_WRITE', 'GOALS', 'AFFIRMATION'] },
+              mood: { type: 'string', enum: ['GREAT', 'GOOD', 'OKAY', 'LOW', 'BAD'] },
+              content: { type: 'string' },
+            },
+          },
+          trainingDetails: {
+            type: 'object',
+            properties: {
+              workoutType: { type: 'string' },
+              durationMinutes: { type: 'integer' },
+              intensity: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'MAX'] },
+              muscleGroups: { type: 'array', items: { type: 'string' } },
+              calories: { type: 'integer' },
+              rpe: { type: 'integer', minimum: 1, maximum: 10 },
+            },
+          },
+        },
+      },
+
+      // ==================== Activity Log Schemas ====================
+      ActivityLog: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          activityId: { type: 'string' },
+          activityName: { type: 'string' },
+          pillar: { type: 'string' },
+          subCategory: { type: 'string' },
+          pointsEarned: { type: 'integer' },
+          completedAt: { type: 'string', format: 'date-time' },
+          details: { type: 'string', nullable: true },
+          source: { type: 'string', enum: ['MANUAL', 'WHOOP', 'AUTO_TRIGGER'] },
+          meditationDetails: { type: 'object', nullable: true },
+          journalEntry: { type: 'object', nullable: true },
+          trainingDetails: { type: 'object', nullable: true },
+        },
+      },
+
+      // ==================== Stack Schemas ====================
+      Stack: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          description: { type: 'string', nullable: true },
+          activityIds: { type: 'array', items: { type: 'string' } },
+          activities: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                points: { type: 'integer' },
+              },
+            },
+          },
+          cueType: { type: 'string', nullable: true },
+          cueValue: { type: 'string', nullable: true },
+          isPreset: { type: 'boolean' },
+          presetKey: { type: 'string', nullable: true },
+          isActive: { type: 'boolean' },
+          completionBonus: { type: 'integer' },
+          currentStreak: { type: 'integer' },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      CreateStackRequest: {
+        type: 'object',
+        required: ['name', 'activityIds'],
+        properties: {
+          name: { type: 'string' },
+          description: { type: 'string' },
+          activityIds: { type: 'array', items: { type: 'string' }, minItems: 2 },
+          cueType: { type: 'string', enum: ['TIME', 'LOCATION', 'AFTER_ACTIVITY'] },
+          cueValue: { type: 'string' },
+          isActive: { type: 'boolean', default: true },
+          completionBonus: { type: 'integer', default: 10, minimum: 0, maximum: 100 },
+        },
+      },
+      StacksResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean' },
+          data: {
+            type: 'object',
+            properties: {
+              stacks: { type: 'array', items: { $ref: '#/components/schemas/Stack' } },
+              activeCount: { type: 'integer' },
+              totalActivitiesInStacks: { type: 'integer' },
+            },
+          },
+        },
+      },
+
+      // ==================== Streaks Schemas ====================
+      StreakInfo: {
+        type: 'object',
+        properties: {
+          current: { type: 'integer' },
+          longest: { type: 'integer' },
+          lastActiveDate: { type: 'string', format: 'date', nullable: true },
+          atRisk: { type: 'boolean' },
+          hoursRemaining: { type: 'number' },
+        },
+      },
+      StreaksResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean' },
+          data: {
+            type: 'object',
+            properties: {
+              overall: { $ref: '#/components/schemas/StreakInfo' },
+              body: { $ref: '#/components/schemas/StreakInfo' },
+              mind: { $ref: '#/components/schemas/StreakInfo' },
+            },
+          },
+        },
+      },
+
+      // ==================== Daily Scores Schemas ====================
+      DailyScore: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', format: 'date' },
+          bodyScore: { type: 'integer' },
+          mindScore: { type: 'integer' },
+          balanceIndex: { type: 'integer' },
+          bodyPoints: { type: 'integer' },
+          mindPoints: { type: 'integer' },
+          bodyComplete: { type: 'boolean' },
+          mindComplete: { type: 'boolean' },
+          subScores: {
+            type: 'object',
+            properties: {
+              training: { type: 'integer' },
+              sleep: { type: 'integer' },
+              nutrition: { type: 'integer' },
+              meditation: { type: 'integer' },
+              reading: { type: 'integer' },
+              learning: { type: 'integer' },
+            },
+          },
+          whoop: {
+            type: 'object',
             nullable: true,
-          },
-          currentPassword: {
-            type: 'string',
-            description: 'Required when changing password',
-          },
-          newPassword: {
-            type: 'string',
-            minLength: 8,
-            description: 'Must contain uppercase, lowercase, and number',
-          },
-        },
-      },
-      ErrorResponse: {
-        type: 'object',
-        properties: {
-          success: {
-            type: 'boolean',
-            example: false,
-          },
-          error: {
-            type: 'object',
             properties: {
-              code: {
-                type: 'string',
-                example: 'VALIDATION_ERROR',
-              },
-              message: {
-                type: 'string',
-                example: 'Invalid input data',
-              },
-              details: {
-                type: 'object',
-                additionalProperties: {
-                  type: 'array',
-                  items: {
-                    type: 'string',
-                  },
-                },
-              },
+              strain: { type: 'number' },
+              sleep: { type: 'number' },
+              recovery: { type: 'number' },
             },
           },
         },
       },
-      CreateHabitRequest: {
-        type: 'object',
-        required: ['name', 'habitanimalId', 'frequency'],
-        properties: {
-          name: {
-            type: 'string',
-            minLength: 1,
-            maxLength: 100,
-            example: 'Morning meditation',
-          },
-          description: {
-            type: 'string',
-            maxLength: 500,
-            nullable: true,
-            example: '10 minutes of mindfulness',
-          },
-          frequency: {
-            type: 'string',
-            enum: ['daily', 'weekly', 'monthly'],
-            example: 'daily',
-          },
-          habitanimalId: {
-            type: 'string',
-            format: 'uuid',
-          },
-        },
-      },
-      UpdateHabitRequest: {
+      DailyScoresResponse: {
         type: 'object',
         properties: {
-          name: {
-            type: 'string',
-            minLength: 1,
-            maxLength: 100,
-          },
-          description: {
-            type: 'string',
-            maxLength: 500,
-            nullable: true,
-          },
-          frequency: {
-            type: 'string',
-            enum: ['daily', 'weekly', 'monthly'],
-          },
-        },
-      },
-      Habit: {
-        type: 'object',
-        properties: {
-          id: {
-            type: 'string',
-            format: 'uuid',
-          },
-          name: {
-            type: 'string',
-          },
-          description: {
-            type: 'string',
-            nullable: true,
-          },
-          frequency: {
-            type: 'string',
-            enum: ['daily', 'weekly', 'monthly'],
-          },
-          habitanimalId: {
-            type: 'string',
-            format: 'uuid',
-          },
-          createdAt: {
-            type: 'string',
-            format: 'date-time',
-          },
-          updatedAt: {
-            type: 'string',
-            format: 'date-time',
-          },
-        },
-      },
-      HabitResponse: {
-        type: 'object',
-        properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          data: {
-            $ref: '#/components/schemas/Habit',
-          },
-        },
-      },
-      HabitListResponse: {
-        type: 'object',
-        properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
+          success: { type: 'boolean' },
           data: {
             type: 'object',
             properties: {
-              items: {
-                type: 'array',
-                items: {
-                  $ref: '#/components/schemas/Habit',
-                },
-              },
-              pagination: {
-                $ref: '#/components/schemas/Pagination',
-              },
-            },
-          },
-        },
-      },
-      HabitCompletionResponse: {
-        type: 'object',
-        properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          data: {
-            type: 'object',
-            properties: {
-              completion: {
-                type: 'object',
-                properties: {
-                  id: {
-                    type: 'string',
-                    format: 'uuid',
-                  },
-                  habitId: {
-                    type: 'string',
-                    format: 'uuid',
-                  },
-                  completedAt: {
-                    type: 'string',
-                    format: 'date-time',
-                  },
-                  xpEarned: {
-                    type: 'integer',
-                    example: 10,
-                  },
-                },
-              },
-              habitanimal: {
-                type: 'object',
-                properties: {
-                  id: {
-                    type: 'string',
-                    format: 'uuid',
-                  },
-                  xp: {
-                    type: 'integer',
-                  },
-                  level: {
-                    type: 'integer',
-                  },
-                  health: {
-                    type: 'number',
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      CreateHabitanimalRequest: {
-        type: 'object',
-        required: ['name', 'species'],
-        properties: {
-          name: {
-            type: 'string',
-            minLength: 1,
-            maxLength: 50,
-            example: 'Spark',
-          },
-          species: {
-            type: 'string',
-            minLength: 1,
-            maxLength: 50,
-            example: 'Phoenix',
-          },
-        },
-      },
-      UpdateHabitanimalRequest: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            minLength: 1,
-            maxLength: 50,
-          },
-        },
-      },
-      Habitanimal: {
-        type: 'object',
-        properties: {
-          id: {
-            type: 'string',
-            format: 'uuid',
-          },
-          name: {
-            type: 'string',
-          },
-          species: {
-            type: 'string',
-          },
-          health: {
-            type: 'number',
-            minimum: 0,
-            maximum: 100,
-          },
-          xp: {
-            type: 'integer',
-            minimum: 0,
-          },
-          level: {
-            type: 'integer',
-            minimum: 1,
-          },
-          userId: {
-            type: 'string',
-            format: 'uuid',
-          },
-          createdAt: {
-            type: 'string',
-            format: 'date-time',
-          },
-          updatedAt: {
-            type: 'string',
-            format: 'date-time',
-          },
-        },
-      },
-      HabitanimalResponse: {
-        type: 'object',
-        properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          data: {
-            $ref: '#/components/schemas/Habitanimal',
-          },
-        },
-      },
-      HabitanimalListResponse: {
-        type: 'object',
-        properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          data: {
-            type: 'object',
-            properties: {
-              items: {
-                type: 'array',
-                items: {
-                  $ref: '#/components/schemas/Habitanimal',
-                },
-              },
-              pagination: {
-                $ref: '#/components/schemas/Pagination',
-              },
-            },
-          },
-        },
-      },
-      DashboardResponse: {
-        type: 'object',
-        properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          data: {
-            type: 'object',
-            properties: {
-              stats: {
-                type: 'object',
-                properties: {
-                  totalHabitanimals: {
-                    type: 'integer',
-                  },
-                  totalHabits: {
-                    type: 'integer',
-                  },
-                  completionsToday: {
-                    type: 'integer',
-                  },
-                  currentStreak: {
-                    type: 'integer',
-                  },
-                },
-              },
-              habitanimals: {
-                type: 'array',
-                items: {
-                  $ref: '#/components/schemas/Habitanimal',
-                },
-              },
-              recentCompletions: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: {
-                      type: 'string',
-                    },
-                    habitId: {
-                      type: 'string',
-                    },
-                    habitName: {
-                      type: 'string',
-                    },
-                    completedAt: {
-                      type: 'string',
-                      format: 'date-time',
-                    },
-                    xpEarned: {
-                      type: 'integer',
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      Pagination: {
-        type: 'object',
-        properties: {
-          page: {
-            type: 'integer',
-            example: 1,
-          },
-          pageSize: {
-            type: 'integer',
-            example: 20,
-          },
-          totalCount: {
-            type: 'integer',
-            example: 100,
-          },
-          totalPages: {
-            type: 'integer',
-            example: 5,
-          },
-          hasNextPage: {
-            type: 'boolean',
-          },
-          hasPreviousPage: {
-            type: 'boolean',
-          },
-        },
-      },
-      HabitanimalHistoryResponse: {
-        type: 'object',
-        properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          data: {
-            type: 'object',
-            properties: {
-              habitanimalId: {
-                type: 'string',
-                format: 'uuid',
-              },
-              period: {
-                type: 'object',
-                properties: {
-                  start: {
-                    type: 'string',
-                    format: 'date',
-                  },
-                  end: {
-                    type: 'string',
-                    format: 'date',
-                  },
-                  days: {
-                    type: 'integer',
-                  },
-                },
-              },
-              dailyHistory: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    date: {
-                      type: 'string',
-                      format: 'date',
-                    },
-                    health: {
-                      type: 'number',
-                    },
-                    xpEarned: {
-                      type: 'integer',
-                    },
-                    completions: {
-                      type: 'integer',
-                    },
-                  },
-                },
-              },
-              levelMilestones: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    level: {
-                      type: 'integer',
-                    },
-                    date: {
-                      type: 'string',
-                      format: 'date-time',
-                    },
-                  },
-                },
-              },
+              scores: { type: 'array', items: { $ref: '#/components/schemas/DailyScore' } },
               summary: {
                 type: 'object',
                 properties: {
-                  totalXpEarned: {
-                    type: 'integer',
-                  },
-                  totalCompletions: {
-                    type: 'integer',
-                  },
-                  avgCompletionsPerDay: {
-                    type: 'number',
-                  },
-                  avgHealth: {
-                    type: 'number',
-                  },
-                  lowestHealth: {
-                    type: 'number',
-                  },
-                  highestHealth: {
-                    type: 'number',
-                  },
+                  totalDays: { type: 'integer' },
+                  daysWithData: { type: 'integer' },
+                  averageBody: { type: 'integer' },
+                  averageMind: { type: 'integer' },
+                  averageBalance: { type: 'integer' },
+                  perfectDays: { type: 'integer' },
+                  bodyCompleteDays: { type: 'integer' },
+                  mindCompleteDays: { type: 'integer' },
                 },
               },
-            },
-          },
-        },
-      },
-      HealthRecalculationResponse: {
-        type: 'object',
-        properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
-          data: {
-            type: 'object',
-            properties: {
-              recalculatedAt: {
-                type: 'string',
-                format: 'date-time',
-              },
-              habitanimals: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: {
-                      type: 'string',
-                      format: 'uuid',
-                    },
-                    type: {
-                      type: 'string',
-                    },
-                    name: {
-                      type: 'string',
-                    },
-                    health: {
-                      type: 'number',
-                    },
-                    previousHealth: {
-                      type: 'number',
-                    },
-                    healthChange: {
-                      type: 'number',
-                    },
-                    mood: {
-                      type: 'string',
-                      enum: ['happy', 'neutral', 'tired', 'sad'],
-                    },
-                  },
-                },
-              },
-              summary: {
+              dateRange: {
                 type: 'object',
                 properties: {
-                  total: {
-                    type: 'integer',
-                  },
-                  healthDecayed: {
-                    type: 'integer',
-                  },
-                  healthUnchanged: {
-                    type: 'integer',
-                  },
+                  startDate: { type: 'string', format: 'date' },
+                  endDate: { type: 'string', format: 'date' },
                 },
               },
             },
           },
         },
       },
-      WhoopConnectionStatus: {
+
+      // ==================== Nutrition Schemas ====================
+      NutritionResponse: {
         type: 'object',
         properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
+          success: { type: 'boolean' },
           data: {
             type: 'object',
             properties: {
-              connected: {
-                type: 'boolean',
+              id: { type: 'string' },
+              date: { type: 'string', format: 'date' },
+              proteinGrams: { type: 'integer' },
+              mealQuality: {
+                type: 'object',
+                properties: {
+                  breakfast: { type: 'string', enum: ['healthy', 'okay', 'bad'], nullable: true },
+                  lunch: { type: 'string', enum: ['healthy', 'okay', 'bad'], nullable: true },
+                  dinner: { type: 'string', enum: ['healthy', 'okay', 'bad'], nullable: true },
+                },
               },
-              lastSync: {
-                type: 'string',
-                format: 'date-time',
-                nullable: true,
+              hasData: { type: 'boolean' },
+            },
+          },
+        },
+      },
+      NutritionRequest: {
+        type: 'object',
+        properties: {
+          date: { type: 'string', format: 'date' },
+          proteinGrams: { type: 'integer', minimum: 0, maximum: 500 },
+          mealQuality: {
+            type: 'object',
+            properties: {
+              breakfast: { type: 'string', enum: ['healthy', 'okay', 'bad'] },
+              lunch: { type: 'string', enum: ['healthy', 'okay', 'bad'] },
+              dinner: { type: 'string', enum: ['healthy', 'okay', 'bad'] },
+            },
+          },
+        },
+      },
+
+      // ==================== Training Schemas ====================
+      TrainingTemplate: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          name: { type: 'string' },
+          points: { type: 'integer' },
+          description: { type: 'string', nullable: true },
+          cueType: { type: 'string', nullable: true },
+          cueValue: { type: 'string', nullable: true },
+          usageCount: { type: 'integer' },
+          createdAt: { type: 'string', format: 'date-time' },
+          trainingDefaults: {
+            type: 'object',
+            nullable: true,
+            properties: {
+              workoutType: { type: 'string' },
+              durationMinutes: { type: 'integer' },
+              intensity: { type: 'string', enum: ['LOW', 'MODERATE', 'HIGH', 'MAX'] },
+              muscleGroups: { type: 'array', items: { type: 'string' } },
+              location: { type: 'string', enum: ['HOME', 'GYM', 'OUTDOOR', 'OTHER'] },
+              defaultExercises: { type: 'array', items: { type: 'object' } },
+            },
+          },
+        },
+      },
+      CreateTrainingTemplateRequest: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name: { type: 'string' },
+          points: { type: 'integer', default: 25 },
+          description: { type: 'string' },
+          cueType: { type: 'string', enum: ['TIME', 'LOCATION', 'AFTER_ACTIVITY'] },
+          cueValue: { type: 'string' },
+          trainingDefaults: {
+            type: 'object',
+            properties: {
+              workoutType: { type: 'string' },
+              durationMinutes: { type: 'integer' },
+              intensity: { type: 'string' },
+              muscleGroups: { type: 'array', items: { type: 'string' } },
+              location: { type: 'string' },
+              defaultExercises: { type: 'array', items: { type: 'object' } },
+            },
+          },
+        },
+      },
+
+      // ==================== Journal Schemas ====================
+      JournalEntry: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          entryType: { type: 'string', enum: ['GRATITUDE', 'REFLECTION', 'FREE_WRITE', 'GOALS', 'AFFIRMATION'] },
+          mood: { type: 'string', enum: ['GREAT', 'GOOD', 'OKAY', 'LOW', 'BAD'] },
+          content: { type: 'string' },
+          wordCount: { type: 'integer' },
+          createdAt: { type: 'string', format: 'date-time' },
+          activityName: { type: 'string' },
+        },
+      },
+      JournalEntriesResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean' },
+          data: {
+            type: 'object',
+            properties: {
+              entries: { type: 'array', items: { $ref: '#/components/schemas/JournalEntry' } },
+              pagination: {
+                type: 'object',
+                properties: {
+                  page: { type: 'integer' },
+                  limit: { type: 'integer' },
+                  total: { type: 'integer' },
+                  totalPages: { type: 'integer' },
+                  hasMore: { type: 'boolean' },
+                },
               },
-              expiresAt: {
-                type: 'string',
-                format: 'date-time',
-                nullable: true,
-              },
-              connectedAt: {
-                type: 'string',
-                format: 'date-time',
-              },
+            },
+          },
+        },
+      },
+
+      // ==================== Whoop Schemas ====================
+      WhoopStatusResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean' },
+          data: {
+            type: 'object',
+            properties: {
+              connected: { type: 'boolean' },
+              lastSync: { type: 'string', format: 'date-time', nullable: true },
+              expiresAt: { type: 'string', format: 'date-time', nullable: true },
             },
           },
         },
@@ -1923,41 +1346,63 @@ export const openApiSpec = {
       WhoopSyncResponse: {
         type: 'object',
         properties: {
-          success: {
-            type: 'boolean',
-            example: true,
-          },
+          success: { type: 'boolean' },
           data: {
             type: 'object',
             properties: {
-              sleepSynced: {
-                type: 'integer',
-                description: 'Number of sleep records synced',
-              },
-              workoutsSynced: {
-                type: 'integer',
-                description: 'Number of workout records synced',
-              },
-              xpEarned: {
+              recovery: {
                 type: 'object',
                 properties: {
-                  sleep: {
-                    type: 'integer',
-                  },
-                  fitness: {
-                    type: 'integer',
-                  },
-                  total: {
-                    type: 'integer',
-                  },
+                  score: { type: 'number' },
+                  hrv: { type: 'number' },
+                  restingHeartRate: { type: 'number' },
                 },
               },
-              errors: {
+              sleep: {
+                type: 'object',
+                properties: {
+                  score: { type: 'number' },
+                  hoursSlept: { type: 'number' },
+                  efficiency: { type: 'number' },
+                },
+              },
+              strain: {
+                type: 'object',
+                properties: {
+                  score: { type: 'number' },
+                  calories: { type: 'number' },
+                },
+              },
+              workouts: {
                 type: 'array',
                 items: {
-                  type: 'string',
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    sportId: { type: 'integer' },
+                    sportName: { type: 'string' },
+                    strain: { type: 'number' },
+                    calories: { type: 'number' },
+                    durationMinutes: { type: 'number' },
+                  },
                 },
               },
+              triggeredActivities: { type: 'array', items: { type: 'string' } },
+            },
+          },
+        },
+      },
+
+      // ==================== Error Schema ====================
+      ErrorResponse: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: false },
+          error: {
+            type: 'object',
+            properties: {
+              code: { type: 'string' },
+              message: { type: 'string' },
             },
           },
         },
