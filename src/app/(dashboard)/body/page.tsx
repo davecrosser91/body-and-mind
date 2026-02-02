@@ -7,6 +7,7 @@ import { ScoreRing } from '@/components/scores/ScoreRing';
 import { ActivityDetailModal } from '@/components/activities';
 import { ActivityLogModal } from '@/components/activities/ActivityLogModal';
 import { TrainingLogModal } from '@/components/training';
+import { NutritionLogModal, type NutritionData } from '@/components/nutrition';
 import { RecoveryCard, SleepCard } from '@/components/whoop';
 import { getSubcategoryConfig } from '@/lib/subcategories';
 import { POINTS_THRESHOLD } from '@/lib/points';
@@ -155,6 +156,7 @@ export default function BodyPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [showTrainingModal, setShowTrainingModal] = useState(false);
+  const [showNutritionModal, setShowNutritionModal] = useState(false);
   const [showActivityPicker, setShowActivityPicker] = useState(false);
   const [loggingActivityId, setLoggingActivityId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
@@ -1008,6 +1010,18 @@ export default function BodyPage() {
         }}
       />
 
+      {/* Nutrition Log Modal */}
+      <NutritionLogModal
+        isOpen={showNutritionModal}
+        onClose={() => setShowNutritionModal(false)}
+        onLogged={(data: NutritionData) => {
+          setProteinGrams(data.proteinGrams);
+          setMealQuality(data.mealQuality);
+          setNotification({ type: 'success', message: 'Nutrition logged!' });
+        }}
+        initialData={{ proteinGrams, mealQuality }}
+      />
+
       {/* Activity Detail Modal (Edit/Delete) */}
       <ActivityDetailModal
         activity={selectedActivity}
@@ -1060,8 +1074,7 @@ export default function BodyPage() {
                 <button
                   onClick={() => {
                     setShowActivityPicker(false);
-                    // TODO: Show nutrition modal when available
-                    setShowActivityModal(true);
+                    setShowNutritionModal(true);
                   }}
                   className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-light transition-colors text-left"
                 >
@@ -1072,7 +1085,7 @@ export default function BodyPage() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-text-primary">Log Nutrition</p>
-                    <p className="text-xs text-text-muted">Meals and hydration</p>
+                    <p className="text-xs text-text-muted">Protein and meals</p>
                   </div>
                 </button>
                 <button
