@@ -36,6 +36,7 @@ services:
     labels:
       # Traefik config
       - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
       - "traefik.http.routers.habits.rule=Host(`habits.bodylessness.com`)"
       - "traefik.http.routers.habits.entrypoints=websecure"
       - "traefik.http.routers.habits.tls.certresolver=letsencrypt"
