@@ -557,12 +557,14 @@ Health check endpoint (no auth required).
 | 5 | +25% |
 | 10+ | +50% (max) |
 
-### Whoop Auto-Triggers
+### Auto-Triggers
 Configure automatic habit completion based on:
 - `WHOOP_RECOVERY_ABOVE/BELOW` - Recovery score thresholds
 - `WHOOP_SLEEP_ABOVE` - Sleep duration
 - `WHOOP_STRAIN_ABOVE` - Daily strain
 - `WHOOP_WORKOUT_TYPE` - Specific workout types
+- `NUTRITION_PROTEIN_ABOVE` - Protein intake threshold (e.g., 100g)
+- `NUTRITION_HEALTHY_MEALS` - Healthy meals count (2 = majority)
 - `ACTIVITY_COMPLETED` - Chain completions
 
 ---
