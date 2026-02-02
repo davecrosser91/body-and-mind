@@ -1,0 +1,112 @@
+# ===========================================
+# Complete Stack for Portainer
+# ===========================================
+# Deploy via Portainer: Stacks → Add Stack → Web editor
+#
+# Required Environment Variables in Portainer:
+#   - NEXTAUTH_SECRET (generate: openssl rand -base64 32)
+#   - WHOOP_CLIENT_ID (from developer.whoop.com)
+#   - WHOOP_CLIENT_SECRET (from developer.whoop.com)
+#   - DB_PASSWORD (change this!)
+#
+# DNS Required:
+#   A record: habits → YOUR_VPS_IP
+#
+# ===========================================
+
+services:
+  # ===========================================
+  # Next.js App
+  # ===========================================
+  app:
+    image: ghcr.io/davecrosser91/body-and-mind:latest
+    container_name: routine-game
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://routine_user:${DB_PASSWORD:-SuperSicher123}@postgres:5432/routine_game
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=https://habits.bodylessness.com
+      - WHOOP_CLIENT_ID=${WHOOP_CLIENT_ID}
+      - WHOOP_CLIENT_SECRET=${WHOOP_CLIENT_SECRET}
+      - WHOOP_REDIRECT_URI=https://habits.bodylessness.com/api/v1/integrations/whoop/callback
+    labels:
+      # Traefik config
+      - "traefik.enable=true"
+      - "traefik.http.routers.habits.rule=Host(`habits.bodylessness.com`)"
+      - "traefik.http.routers.habits.entrypoints=websecure"
+      - "traefik.http.routers.habits.tls.certresolver=letsencrypt"
+      - "traefik.http.services.habits.loadbalancer.server.port=3000"
+      # Health check
+      - "traefik.http.services.habits.loadbalancer.healthcheck.path=/api/v1/health"
+      - "traefik.http.services.habits.loadbalancer.healthcheck.interval=30s"
+      # Rate limiting
+      - "traefik.http.middlewares.habits-ratelimit.ratelimit.average=100"
+      - "traefik.http.middlewares.habits-ratelimit.ratelimit.burst=50"
+      - "traefik.http.routers.habits.middlewares=habits-ratelimit"
+      # Security headers
+      - "traefik.http.middlewares.habits-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.habits-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.habits-headers.headers.frameDeny=true"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - proxy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ===========================================
+  # PostgreSQL Database
+  # ===========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=routine_game
+      - POSTGRES_USER=routine_user
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-SuperSicher123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U routine_user -d routine_game"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - proxy
+
+  # ===========================================
+  # Watchtower - Auto-update containers
+  # ===========================================
+  watchtower:
+    image: containrrr/watchtower
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /root/.docker/config.json:/config.json:ro
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=300
+      - WATCHTOWER_INCLUDE_STOPPED=false
+    command: routine-game
+    networks:
+      - proxy
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  proxy:
+    external: true
