@@ -504,6 +504,11 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       where: { id: completion.id },
     })
 
+    // Recalculate streaks after removing completion
+    updateStreaksForDate(user.id, new Date()).catch((error) => {
+      console.error('[Streaks] Update error after activity uncomplete:', error)
+    })
+
     return successResponse({
       message: 'Completion removed successfully',
       deletedCompletionId: completion.id,

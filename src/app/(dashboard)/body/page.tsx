@@ -4,22 +4,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ScoreRing } from '@/components/scores/ScoreRing';
-import {
-  SubCategoryTabs,
-  TrainingDashboard,
-  SleepDashboard,
-  NutritionDashboard,
-  CustomDashboard,
-  AllActivitiesDashboard,
-  AddSubCategoryModal,
-  EditSubCategoryModal,
-} from '@/components/subcategories';
-import type { CustomSubcategory } from '@/components/subcategories';
-import { QuickLogChips, ActivityDetailModal } from '@/components/activities';
+import { ActivityDetailModal } from '@/components/activities';
 import { ActivityLogModal } from '@/components/activities/ActivityLogModal';
 import { TrainingLogModal } from '@/components/training';
-import { RecoveryCard, SleepCard, TrainingCard } from '@/components/whoop';
-import { PREDEFINED_SUBCATEGORIES, getSubcategoryConfig, getSubcategoriesForPillar } from '@/lib/subcategories';
+import { RecoveryCard, SleepCard } from '@/components/whoop';
+import { getSubcategoryConfig } from '@/lib/subcategories';
 import { POINTS_THRESHOLD } from '@/lib/points';
 import { useAuth } from '@/hooks/useAuth';
 import { DateNavigation } from '@/components/navigation';
@@ -59,6 +48,25 @@ interface Activity {
   subCategory: string;
   points: number;
   isHabit: boolean;
+}
+
+interface TrainingDetails {
+  workoutType: string | null;
+  durationMinutes: number | null;
+  intensity: string | null;
+  muscleGroups?: string[];
+  calories?: number | null;
+  rpe?: number | null;
+}
+
+interface ActivityLog {
+  id: string;
+  activityId: string;
+  activityName: string;
+  subCategory: string;
+  pointsEarned: number;
+  completedAt: string;
+  trainingDetails: TrainingDetails | null;
 }
 
 interface CompletedActivity {
@@ -126,13 +134,6 @@ function BodyPageSkeleton() {
         <div className="w-[200px] h-[200px] bg-surface-light rounded-full" />
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2">
-        <div className="w-24 h-10 bg-surface-light rounded-full" />
-        <div className="w-20 h-10 bg-surface-light rounded-full" />
-        <div className="w-24 h-10 bg-surface-light rounded-full" />
-      </div>
-
       {/* Cards */}
       <div className="h-40 bg-surface-light rounded-2xl" />
       <div className="h-32 bg-surface-light rounded-2xl" />
@@ -148,12 +149,13 @@ export default function BodyPage() {
 
   // State
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [selectedCategory, setSelectedCategory] = useState('ALL');
-  const [customSubcategories, setCustomSubcategories] = useState<CustomSubcategory[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [dailyStatus, setDailyStatus] = useState<DailyStatusData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showActivityModal, setShowActivityModal] = useState(false);
+  const [showTrainingModal, setShowTrainingModal] = useState(false);
+  const [showActivityPicker, setShowActivityPicker] = useState(false);
   const [loggingActivityId, setLoggingActivityId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
@@ -161,23 +163,39 @@ export default function BodyPage() {
   } | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showAddSubcategoryModal, setShowAddSubcategoryModal] = useState(false);
+
+  // Nutrition state
+  const [proteinGrams, setProteinGrams] = useState<number>(0);
+  const [mealQuality, setMealQuality] = useState<{
+    breakfast: 'healthy' | 'okay' | 'bad' | null;
+    lunch: 'healthy' | 'okay' | 'bad' | null;
+    dinner: 'healthy' | 'okay' | 'bad' | null;
+  }>({
+    breakfast: null,
+    lunch: null,
+    dinner: null,
+  });
 
   // Derived state
   const isToday = isDateToday(selectedDate);
-  const [editingSubcategory, setEditingSubcategory] = useState<CustomSubcategory | null>(null);
-
-  // Calculate points from daily status activities
   const bodyPoints = dailyStatus?.body.score ?? 0;
-
-  // Calculate category points from completed activities
-  const categoryCompletions = dailyStatus?.body.activities.filter(
-    (a) => a.category.toUpperCase() === selectedCategory.toUpperCase()
-  ) ?? [];
-  const categoryPoints = categoryCompletions.length * 25; // Approximate points per activity
-
-  // Get streak
   const streak = dailyStatus?.streak.current ?? 0;
+
+  // Get completed activity IDs for today
+  const completedActivityIds = new Set(
+    (dailyStatus?.body.activities ?? []).map((a) => a.id)
+  );
+
+  // Group activities by subcategory
+  const groupedActivities = activities.reduce<Record<string, Activity[]>>((acc, activity) => {
+    const cat = activity.subCategory.toUpperCase();
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(activity);
+    return acc;
+  }, {});
+
+  // Get categories sorted
+  const categories = Object.keys(groupedActivities).sort();
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -187,12 +205,13 @@ export default function BodyPage() {
 
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const dateParam = isDateToday(selectedDate) ? '' : `?date=${formatDateParam(selectedDate)}`;
+      const dateStr = formatDateParam(selectedDate);
+      const dateParam = isDateToday(selectedDate) ? '' : `?date=${dateStr}`;
 
-      const [activitiesRes, statusRes, subcategoriesRes] = await Promise.all([
+      const [activitiesRes, statusRes, logsRes] = await Promise.all([
         fetch('/api/v1/activities?pillar=BODY', { headers }),
         fetch(`/api/v1/daily-status${dateParam}`, { headers }),
-        fetch('/api/v1/subcategories?pillar=BODY', { headers }),
+        fetch(`/api/v1/activity-logs?pillar=BODY&date=${dateStr}`, { headers }),
       ]);
 
       if (activitiesRes.ok) {
@@ -205,9 +224,9 @@ export default function BodyPage() {
         setDailyStatus(data.data);
       }
 
-      if (subcategoriesRes.ok) {
-        const data = await subcategoriesRes.json();
-        setCustomSubcategories(data.data.subcategories || []);
+      if (logsRes.ok) {
+        const data = await logsRes.json();
+        setActivityLogs(data.data || []);
       }
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -245,7 +264,7 @@ export default function BodyPage() {
       });
       if (res.ok) {
         setNotification({ type: 'success', message: 'Activity logged!' });
-        fetchData(); // Refresh data
+        fetchData();
       } else {
         setNotification({ type: 'error', message: 'Failed to log activity' });
       }
@@ -256,56 +275,33 @@ export default function BodyPage() {
     }
   };
 
-  // Handle add custom category
-  const handleAddCustomCategory = () => {
-    setShowAddSubcategoryModal(true);
-  };
+  // Handle uncomplete (toggle off)
+  const handleUncomplete = async (activityId: string) => {
+    setLoggingActivityId(activityId);
+    try {
+      const res = await fetch(`/api/v1/activities/${activityId}/complete`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-  // Handle subcategory created
-  const handleSubcategoryCreated = (subcategory: CustomSubcategory) => {
-    setCustomSubcategories((prev) => [...prev, subcategory]);
-    setNotification({ type: 'success', message: `${subcategory.name} category created!` });
-  };
-
-  // Handle edit custom subcategory
-  const handleEditCustomSubcategory = (subcategory: CustomSubcategory) => {
-    setEditingSubcategory(subcategory);
-  };
-
-  // Handle subcategory updated
-  const handleSubcategoryUpdated = (updated: CustomSubcategory) => {
-    setCustomSubcategories((prev) =>
-      prev.map((s) => (s.id === updated.id ? updated : s))
-    );
-    setNotification({ type: 'success', message: `${updated.name} updated!` });
-  };
-
-  // Handle subcategory deleted
-  const handleSubcategoryDeleted = () => {
-    if (editingSubcategory) {
-      setCustomSubcategories((prev) =>
-        prev.filter((s) => s.id !== editingSubcategory.id)
-      );
-      // If we were viewing the deleted category, switch to ALL
-      if (selectedCategory === editingSubcategory.key) {
-        setSelectedCategory('ALL');
+      if (res.ok) {
+        setNotification({ type: 'success', message: 'Completion removed' });
+        fetchData();
+      } else {
+        const error = await res.json();
+        setNotification({
+          type: 'error',
+          message: error.message || 'Failed to remove completion',
+        });
       }
-      setNotification({ type: 'success', message: 'Category deleted!' });
-      fetchData(); // Refresh to update activities
+    } catch (error) {
+      console.error('Uncomplete error:', error);
+      setNotification({ type: 'error', message: 'Failed to remove completion' });
+    } finally {
+      setLoggingActivityId(null);
     }
-  };
-
-  // Get all available subcategories for reassignment dropdown
-  const getAllSubcategories = () => {
-    const predefined = getSubcategoriesForPillar('BODY').map((key) => ({
-      key,
-      name: getSubcategoryConfig(key)?.label || key,
-    }));
-    const custom = customSubcategories.map((s) => ({
-      key: s.key,
-      name: s.name,
-    }));
-    return [...predefined, ...custom];
   };
 
   // Handle activity selection (for edit/delete)
@@ -329,7 +325,6 @@ export default function BodyPage() {
       if (res.ok) {
         setNotification({ type: 'success', message: 'Activity updated!' });
         fetchData();
-        // Update the selected activity with new data
         setSelectedActivity((prev) => (prev ? { ...prev, ...data } : null));
       } else {
         const error = await res.json();
@@ -372,84 +367,10 @@ export default function BodyPage() {
     }
   };
 
-  // Render dashboard based on selected category
-  const renderDashboard = () => {
-    // All activities view
-    if (selectedCategory === 'ALL') {
-      return (
-        <AllActivitiesDashboard
-          activities={activities}
-          completedActivities={dailyStatus?.body.activities ?? []}
-          totalPoints={bodyPoints}
-          pillar="BODY"
-          onQuickLog={handleQuickLog}
-          onActivitySelect={(activity) => handleActivitySelect(activity as Activity)}
-          isLogging={loggingActivityId}
-        />
-      );
-    }
-
-    const categoryActivities =
-      dailyStatus?.body.activities
-        .filter((c) => c.category.toUpperCase() === selectedCategory.toUpperCase())
-        .map((c) => ({
-          id: c.id,
-          name: c.name,
-          completedAt: c.completedAt,
-          pointsEarned: 25, // Default points
-        })) ?? [];
-
-    switch (selectedCategory) {
-      case 'TRAINING':
-        return (
-          <TrainingDashboard
-            whoopData={dailyStatus?.whoop?.training}
-            activities={categoryActivities}
-            totalPoints={categoryPoints}
-          />
-        );
-      case 'SLEEP':
-        return (
-          <SleepDashboard
-            whoopData={dailyStatus?.whoop?.sleep}
-            activities={categoryActivities}
-            totalPoints={categoryPoints}
-          />
-        );
-      case 'NUTRITION':
-        return (
-          <NutritionDashboard activities={categoryActivities} totalPoints={categoryPoints} />
-        );
-      default:
-        return (
-          <CustomDashboard
-            categoryName={selectedCategory}
-            activities={categoryActivities}
-            totalPoints={categoryPoints}
-            pillar="BODY"
-          />
-        );
-    }
-  };
-
-  // Get habits for quick log (isHabit=true for current category)
-  const quickLogHabits = activities
-    .filter((a) => a.isHabit && a.subCategory.toUpperCase() === selectedCategory.toUpperCase())
-    .map((a) => ({
-      id: a.id,
-      name: a.name,
-      points: a.points,
-      subCategory: a.subCategory,
-    }));
-
   // Loading state
   if (isLoading) {
     return <BodyPageSkeleton />;
   }
-
-  // Get subcategory config for selected category color
-  const categoryConfig = getSubcategoryConfig(selectedCategory);
-  const categoryColor = categoryConfig?.color ?? BODY_COLOR;
 
   return (
     <motion.div
@@ -500,38 +421,27 @@ export default function BodyPage() {
       <motion.header
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
+        className="flex items-center gap-4"
       >
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="w-10 h-10 rounded-lg bg-surface-light flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-lighter transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold" style={{ color: BODY_COLOR }}>
-              Body
-            </h1>
-            <p className="text-text-muted text-sm">Physical wellness tracking</p>
-          </div>
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="w-10 h-10 rounded-lg bg-surface-light flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-lighter transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: BODY_COLOR }}>
+            Body
+          </h1>
+          <p className="text-text-muted text-sm">Physical wellness tracking</p>
         </div>
-        {isToday && (
-          <button
-            onClick={() => setShowActivityModal(true)}
-            className="px-4 py-2 rounded-lg font-medium text-background transition-colors hover:opacity-90"
-            style={{ backgroundColor: BODY_COLOR }}
-          >
-            Log Activity
-          </button>
-        )}
       </motion.header>
 
       {/* Date Navigation */}
@@ -556,10 +466,10 @@ export default function BodyPage() {
         className="flex flex-col items-center py-4"
       >
         <div className="relative">
-          <ScoreRing score={bodyPoints} pillar="body" size={200} strokeWidth={12} showLabel={false} showScore={false} />
+          <ScoreRing score={bodyPoints} pillar="body" size={180} strokeWidth={10} showLabel={false} showScore={false} />
           {/* Points display in center */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-4xl font-bold" style={{ color: BODY_COLOR }}>
+            <span className="text-3xl font-bold" style={{ color: BODY_COLOR }}>
               {bodyPoints}
             </span>
             <span className="text-text-muted text-sm">/ {POINTS_THRESHOLD} pts</span>
@@ -571,7 +481,7 @@ export default function BodyPage() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+            transition={{ delay: 0.15 }}
             className="flex items-center gap-2 mt-4 px-4 py-2 rounded-full bg-surface-light"
           >
             <svg
@@ -591,16 +501,15 @@ export default function BodyPage() {
         )}
       </motion.section>
 
-      {/* Whoop Data Section - Recovery, Sleep, Training */}
-      {dailyStatus?.whoop?.connected && isToday && (
+      {/* Recovery Card - Centered */}
+      {dailyStatus?.recovery && dailyStatus.recovery.score !== null && dailyStatus.recovery.zone && (
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="space-y-3"
+          transition={{ delay: 0.2 }}
+          className="flex justify-center"
         >
-          {/* Recovery Card */}
-          {dailyStatus.recovery && dailyStatus.recovery.score !== null && dailyStatus.recovery.zone && (
+          <div className="w-full max-w-md">
             <RecoveryCard
               data={{
                 score: dailyStatus.recovery.score,
@@ -610,49 +519,187 @@ export default function BodyPage() {
                 recommendation: dailyStatus.recovery.recommendation,
               }}
             />
-          )}
-
-          {/* Sleep Card */}
-          {dailyStatus.whoop.sleep && (
-            <SleepCard data={dailyStatus.whoop.sleep} />
-          )}
-
-          {/* Training/Strain Card */}
-          {dailyStatus.whoop.training && dailyStatus.whoop.training.workouts.length > 0 && (
-            <TrainingCard data={dailyStatus.whoop.training} />
-          )}
+          </div>
         </motion.section>
       )}
 
-      {/* SubCategory Tabs */}
-      <motion.section
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-      >
-        <SubCategoryTabs
-          pillar="BODY"
-          selectedCategory={selectedCategory}
-          customCategories={customSubcategories}
-          onSelect={setSelectedCategory}
-          onAddCustom={handleAddCustomCategory}
-          onEditCustom={handleEditCustomSubcategory}
-        />
-      </motion.section>
+      {/* Sleep Card */}
+      {dailyStatus?.whoop?.sleep && (
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+        >
+          <SleepCard data={dailyStatus.whoop.sleep} />
+        </motion.section>
+      )}
 
-      {/* Quick Log Chips (only for today) */}
-      {isToday && quickLogHabits.length > 0 && (
+      {/* Nutrition Section */}
+      {isToday && (
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
+          className="bg-surface/60 backdrop-blur-lg rounded-2xl p-5 border border-white/5"
         >
-          <QuickLogChips
-            activities={quickLogHabits}
-            onLog={handleQuickLog}
-            isLogging={loggingActivityId}
-            pillarColor={categoryColor}
-          />
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-text-primary">Nutrition</h3>
+              <p className="text-xs text-text-muted">Track meals and protein</p>
+            </div>
+          </div>
+
+          {/* Protein Tracking */}
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text-secondary">Protein</span>
+              <span className="text-sm font-medium" style={{ color: BODY_COLOR }}>
+                {proteinGrams}g
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min="0"
+                max="200"
+                value={proteinGrams}
+                onChange={(e) => setProteinGrams(parseInt(e.target.value))}
+                className="flex-1 h-2 bg-surface-light rounded-full appearance-none cursor-pointer"
+                style={{
+                  background: `linear-gradient(to right, ${BODY_COLOR} 0%, ${BODY_COLOR} ${proteinGrams / 2}%, rgba(255,255,255,0.1) ${proteinGrams / 2}%)`,
+                }}
+              />
+              <div className="flex gap-1">
+                {[25, 50, 100, 150].map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => setProteinGrams(preset)}
+                    className={`px-2 py-1 rounded text-xs transition-colors ${
+                      proteinGrams === preset
+                        ? 'bg-surface-lighter text-text-primary'
+                        : 'text-text-muted hover:bg-surface-light'
+                    }`}
+                  >
+                    {preset}g
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Meal Quality Tracking */}
+          <div className="space-y-3">
+            {(['breakfast', 'lunch', 'dinner'] as const).map((meal) => {
+              const mealLabels = {
+                breakfast: 'Breakfast',
+                lunch: 'Lunch',
+                dinner: 'Dinner',
+              };
+              const currentQuality = mealQuality[meal];
+
+              return (
+                <div key={meal} className="flex items-center justify-between">
+                  <span className="text-sm text-text-secondary">{mealLabels[meal]}</span>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() =>
+                        setMealQuality((prev) => ({
+                          ...prev,
+                          [meal]: prev[meal] === 'healthy' ? null : 'healthy',
+                        }))
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        currentQuality === 'healthy'
+                          ? 'bg-green-500/20 text-green-400 ring-1 ring-green-500/30'
+                          : 'bg-surface-light text-text-muted hover:bg-surface-lighter'
+                      }`}
+                    >
+                      Healthy
+                    </button>
+                    <button
+                      onClick={() =>
+                        setMealQuality((prev) => ({
+                          ...prev,
+                          [meal]: prev[meal] === 'okay' ? null : 'okay',
+                        }))
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        currentQuality === 'okay'
+                          ? 'bg-yellow-500/20 text-yellow-400 ring-1 ring-yellow-500/30'
+                          : 'bg-surface-light text-text-muted hover:bg-surface-lighter'
+                      }`}
+                    >
+                      Okay
+                    </button>
+                    <button
+                      onClick={() =>
+                        setMealQuality((prev) => ({
+                          ...prev,
+                          [meal]: prev[meal] === 'bad' ? null : 'bad',
+                        }))
+                      }
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                        currentQuality === 'bad'
+                          ? 'bg-red-500/20 text-red-400 ring-1 ring-red-500/30'
+                          : 'bg-surface-light text-text-muted hover:bg-surface-lighter'
+                      }`}
+                    >
+                      Bad
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </motion.section>
+      )}
+
+      {/* Whoop Training Card - Strain from wearable */}
+      {dailyStatus?.whoop?.training && dailyStatus.whoop.training.strain > 0 && (
+        <motion.section
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="bg-surface/60 backdrop-blur-lg rounded-2xl p-5 border border-white/5"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary">Day Strain</h3>
+                <p className="text-xs text-text-muted">From Whoop</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-orange-400">
+                {dailyStatus.whoop.training.strain.toFixed(1)}
+              </p>
+              <p className="text-xs text-text-muted">{dailyStatus.whoop.training.calories} kcal</p>
+            </div>
+          </div>
+          {dailyStatus.whoop.training.workouts.length > 0 && (
+            <div className="space-y-2 pt-3 border-t border-white/5">
+              {dailyStatus.whoop.training.workouts.map((workout, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <span className="text-text-secondary capitalize">{workout.name}</span>
+                  <div className="flex items-center gap-3 text-xs text-text-muted">
+                    <span>{workout.duration} min</span>
+                    <span>{workout.calories} kcal</span>
+                    <span className="text-orange-400 font-medium">{workout.strain.toFixed(1)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </motion.section>
       )}
 
@@ -672,49 +719,294 @@ export default function BodyPage() {
         </motion.div>
       )}
 
-      {/* Dashboard Content */}
+      {/* All Activities - Grouped by Category */}
       <motion.section
-        key={selectedCategory}
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
+        transition={{ delay: 0.4 }}
+        className="space-y-4"
       >
-        <AnimatePresence mode="wait">
+        {/* Activities by Category */}
+        {categories.length > 0 ? (
+          categories.map((category, idx) => {
+            const categoryActivities = groupedActivities[category] || [];
+            const config = getSubcategoryConfig(category);
+            const categoryColor = config?.color ?? BODY_COLOR;
+            const categoryLabel = config?.label ?? category;
+            const completedInCategory = categoryActivities.filter((a) =>
+              completedActivityIds.has(a.id)
+            ).length;
+
+            return (
+              <motion.div
+                key={category}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.05 * (idx + 1) }}
+                className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5"
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: categoryColor }}
+                  />
+                  <h3 className="text-sm font-medium text-text-secondary">{categoryLabel}</h3>
+                  <span className="text-xs text-text-muted ml-auto">
+                    {completedInCategory}/{categoryActivities.length}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {categoryActivities.map((activity) => {
+                    const isCompleted = completedActivityIds.has(activity.id);
+                    const isCurrentlyLogging = loggingActivityId === activity.id;
+                    const completionLog = activityLogs.find(
+                      (log) => log.activityId === activity.id
+                    );
+                    const completionTime = completionLog
+                      ? new Date(completionLog.completedAt).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })
+                      : null;
+
+                    // Get details for completed activities
+                    const hasDetails = completionLog?.trainingDetails;
+
+                    return (
+                      <div
+                        key={activity.id}
+                        className={`rounded-xl transition-colors ${
+                          isCompleted
+                            ? 'bg-white/5'
+                            : 'bg-surface-light hover:bg-surface-lighter'
+                        }`}
+                      >
+                        {/* Main row */}
+                        <div className="flex items-center justify-between py-3 px-4">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            {/* Toggle checkbox */}
+                            {isToday && (
+                              <button
+                                onClick={() =>
+                                  isCompleted
+                                    ? handleUncomplete(activity.id)
+                                    : handleQuickLog(activity.id)
+                                }
+                                disabled={isCurrentlyLogging}
+                                className={`w-6 h-6 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                                  isCompleted ? '' : 'border-2 hover:border-opacity-60'
+                                }`}
+                                style={{
+                                  backgroundColor: isCompleted ? categoryColor : 'transparent',
+                                  borderColor: isCompleted ? categoryColor : 'rgba(255,255,255,0.2)',
+                                }}
+                              >
+                                {isCurrentlyLogging ? (
+                                  <svg
+                                    className="w-4 h-4 animate-spin"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    style={{ color: isCompleted ? '#1a1a2e' : categoryColor }}
+                                  >
+                                    <circle
+                                      className="opacity-25"
+                                      cx="12"
+                                      cy="12"
+                                      r="10"
+                                      stroke="currentColor"
+                                      strokeWidth="4"
+                                    />
+                                    <path
+                                      className="opacity-75"
+                                      fill="currentColor"
+                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    />
+                                  </svg>
+                                ) : isCompleted ? (
+                                  <svg
+                                    className="w-4 h-4 text-background"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={3}
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                ) : null}
+                              </button>
+                            )}
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`text-sm font-medium truncate ${
+                                    isCompleted ? 'text-text-muted' : 'text-text-primary'
+                                  }`}
+                                >
+                                  {activity.name}
+                                </span>
+                                {activity.isHabit && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-text-muted flex-shrink-0">
+                                    Habit
+                                  </span>
+                                )}
+                              </div>
+                              {isCompleted && completionTime && (
+                                <span className="text-xs text-text-muted">
+                                  Completed at {completionTime}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <span
+                              className={`text-sm font-medium ${
+                                isCompleted ? 'text-text-muted' : ''
+                              }`}
+                              style={{ color: isCompleted ? undefined : categoryColor }}
+                            >
+                              {activity.points} pts
+                            </span>
+
+                            {/* Edit button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleActivitySelect(activity);
+                              }}
+                              className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-surface-lighter transition-colors"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Training Details section for completed activities */}
+                        {isCompleted && hasDetails && completionLog?.trainingDetails && (
+                          <div className="px-4 pb-3 pt-2 border-t border-white/5 ml-9">
+                            <div className="flex flex-wrap items-center gap-2">
+                              {completionLog.trainingDetails.durationMinutes && (
+                                <div className="flex items-center gap-1.5 text-sm text-text-primary">
+                                  <svg className="w-4 h-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  <span>{completionLog.trainingDetails.durationMinutes} min</span>
+                                </div>
+                              )}
+                              {completionLog.trainingDetails.workoutType && (
+                                <span
+                                  className="px-2.5 py-1 rounded-lg text-xs font-medium capitalize"
+                                  style={{ backgroundColor: `${categoryColor}25`, color: categoryColor }}
+                                >
+                                  {completionLog.trainingDetails.workoutType.replace(/_/g, ' ').toLowerCase()}
+                                </span>
+                              )}
+                              {completionLog.trainingDetails.intensity && (
+                                <span className="px-2.5 py-1 rounded-lg text-xs bg-white/5 text-text-secondary capitalize">
+                                  {completionLog.trainingDetails.intensity.toLowerCase()}
+                                </span>
+                              )}
+                              {completionLog.trainingDetails.rpe && (
+                                <span className="px-2.5 py-1 rounded-lg text-xs bg-white/5 text-text-secondary">
+                                  RPE {completionLog.trainingDetails.rpe}/10
+                                </span>
+                              )}
+                              {completionLog.trainingDetails.calories && (
+                                <span className="text-xs text-text-muted ml-auto">
+                                  {completionLog.trainingDetails.calories} kcal
+                                </span>
+                              )}
+                            </div>
+                            {completionLog.trainingDetails.muscleGroups && completionLog.trainingDetails.muscleGroups.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {completionLog.trainingDetails.muscleGroups.map((muscle, i) => (
+                                  <span
+                                    key={i}
+                                    className="text-xs px-2 py-0.5 rounded-full bg-surface-lighter text-text-muted capitalize"
+                                  >
+                                    {muscle.replace(/_/g, ' ').toLowerCase()}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            );
+          })
+        ) : (
+          /* Empty State */
           <motion.div
-            key={selectedCategory}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+            className="text-center py-12"
           >
-            {renderDashboard()}
+            <div
+              className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
+              style={{ backgroundColor: `${BODY_COLOR}15` }}
+            >
+              <svg className="w-8 h-8" fill="none" stroke={BODY_COLOR} viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                />
+              </svg>
+            </div>
+            <p className="text-text-muted mb-2">No activities yet</p>
+            <p className="text-sm text-text-muted/70">
+              Create activities to track your body progress
+            </p>
           </motion.div>
-        </AnimatePresence>
+        )}
       </motion.section>
 
-      {/* Activity Log Modal - Use TrainingLogModal for TRAINING category */}
-      {selectedCategory === 'TRAINING' ? (
-        <TrainingLogModal
-          isOpen={showActivityModal}
-          onClose={() => setShowActivityModal(false)}
-          onLogged={() => {
-            setShowActivityModal(false);
-            fetchData();
-            setNotification({ type: 'success', message: 'Training logged!' });
-          }}
-        />
-      ) : (
-        <ActivityLogModal
-          isOpen={showActivityModal}
-          onClose={() => setShowActivityModal(false)}
-          onLogged={() => {
-            setShowActivityModal(false);
-            fetchData();
-            setNotification({ type: 'success', message: 'Activity logged!' });
-          }}
-          pillar="BODY"
-        />
-      )}
+      {/* Activity Log Modal */}
+      <ActivityLogModal
+        isOpen={showActivityModal}
+        onClose={() => setShowActivityModal(false)}
+        onLogged={() => {
+          setShowActivityModal(false);
+          fetchData();
+          setNotification({ type: 'success', message: 'Activity logged!' });
+        }}
+        pillar="BODY"
+      />
+
+      {/* Training Log Modal */}
+      <TrainingLogModal
+        isOpen={showTrainingModal}
+        onClose={() => setShowTrainingModal(false)}
+        onLogged={() => {
+          setShowTrainingModal(false);
+          fetchData();
+          setNotification({ type: 'success', message: 'Training logged!' });
+        }}
+      />
 
       {/* Activity Detail Modal (Edit/Delete) */}
       <ActivityDetailModal
@@ -728,24 +1020,107 @@ export default function BodyPage() {
         onDelete={handleActivityDelete}
       />
 
-      {/* Add Subcategory Modal */}
-      <AddSubCategoryModal
-        isOpen={showAddSubcategoryModal}
-        onClose={() => setShowAddSubcategoryModal(false)}
-        onSuccess={handleSubcategoryCreated}
-        pillar="BODY"
-      />
+      {/* Activity Picker Modal */}
+      <AnimatePresence>
+        {showActivityPicker && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 z-40"
+              onClick={() => setShowActivityPicker(false)}
+            />
+            {/* Picker */}
+            <motion.div
+              initial={{ opacity: 0, y: 100 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 100 }}
+              className="fixed bottom-24 right-4 z-50 bg-surface rounded-2xl border border-white/10 shadow-xl overflow-hidden"
+            >
+              <div className="p-2 space-y-1">
+                <button
+                  onClick={() => {
+                    setShowActivityPicker(false);
+                    setShowTrainingModal(true);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-light transition-colors text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">Log Training</p>
+                    <p className="text-xs text-text-muted">Workout with details</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowActivityPicker(false);
+                    // TODO: Show nutrition modal when available
+                    setShowActivityModal(true);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-light transition-colors text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16m-7 6h7" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">Log Nutrition</p>
+                    <p className="text-xs text-text-muted">Meals and hydration</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowActivityPicker(false);
+                    setShowActivityModal(true);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-surface-light transition-colors text-left"
+                >
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: `${BODY_COLOR}20` }}>
+                    <svg className="w-5 h-5" style={{ color: BODY_COLOR }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">Other Activity</p>
+                    <p className="text-xs text-text-muted">Any body activity</p>
+                  </div>
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
-      {/* Edit Subcategory Modal */}
-      <EditSubCategoryModal
-        isOpen={!!editingSubcategory}
-        onClose={() => setEditingSubcategory(null)}
-        onSuccess={handleSubcategoryUpdated}
-        onDelete={handleSubcategoryDeleted}
-        subcategory={editingSubcategory}
-        pillar="BODY"
-        availableSubcategories={getAllSubcategories()}
-      />
+      {/* Floating Action Button */}
+      {isToday && (
+        <motion.button
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => setShowActivityPicker(!showActivityPicker)}
+          className="fixed bottom-6 right-6 w-14 h-14 rounded-full shadow-lg flex items-center justify-center z-30 transition-transform"
+          style={{ backgroundColor: BODY_COLOR }}
+        >
+          <motion.svg
+            animate={{ rotate: showActivityPicker ? 45 : 0 }}
+            transition={{ duration: 0.2 }}
+            className="w-7 h-7 text-background"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+          </motion.svg>
+        </motion.button>
+      )}
     </motion.div>
   );
 }

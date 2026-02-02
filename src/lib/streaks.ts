@@ -109,13 +109,26 @@ async function updatePillarStreak(
     update: {},
   });
 
+  const dateStart = new Date(date);
+  dateStart.setHours(0, 0, 0, 0);
+
   const yesterday = new Date(date);
   yesterday.setDate(yesterday.getDate() - 1);
+  yesterday.setHours(0, 0, 0, 0);
 
   if (complete) {
+    // Check if already completed today (same day) - don't increment again
+    const alreadyCompletedToday = streak.lastActiveDate &&
+      streak.lastActiveDate.getTime() >= dateStart.getTime();
+
+    if (alreadyCompletedToday) {
+      // Already counted this day, no change needed
+      return;
+    }
+
     // Check if continuing streak from yesterday
     const wasActiveYesterday = streak.lastActiveDate &&
-      streak.lastActiveDate.getTime() >= yesterday.setHours(0, 0, 0, 0);
+      streak.lastActiveDate.getTime() >= yesterday.getTime();
 
     const newCurrent = wasActiveYesterday ? streak.current + 1 : 1;
 
@@ -127,12 +140,45 @@ async function updatePillarStreak(
         lastActiveDate: date,
       },
     });
-  } else if (streak.lastActiveDate && streak.lastActiveDate < yesterday) {
-    // Missed yesterday, reset streak
-    await prisma.streak.update({
-      where: { id: streak.id },
-      data: { current: 0 },
-    });
+  } else {
+    // Day is NOT complete
+    const lastActiveWasToday = streak.lastActiveDate &&
+      streak.lastActiveDate.getTime() >= dateStart.getTime();
+
+    if (lastActiveWasToday) {
+      // We marked today as complete before, but now it's not
+      // Need to undo today's contribution to the streak
+
+      // Check if yesterday was complete
+      const yesterdayScore = await prisma.dailyScore.findUnique({
+        where: { userId_date: { userId, date: yesterday } },
+      });
+
+      let yesterdayComplete = false;
+      if (yesterdayScore) {
+        if (pillarKey === 'BODY') {
+          yesterdayComplete = yesterdayScore.bodyComplete;
+        } else if (pillarKey === 'MIND') {
+          yesterdayComplete = yesterdayScore.mindComplete;
+        } else {
+          yesterdayComplete = yesterdayScore.bodyComplete && yesterdayScore.mindComplete;
+        }
+      }
+
+      await prisma.streak.update({
+        where: { id: streak.id },
+        data: {
+          current: Math.max(0, streak.current - 1),
+          lastActiveDate: yesterdayComplete ? yesterday : null,
+        },
+      });
+    } else if (streak.lastActiveDate && streak.lastActiveDate < yesterday) {
+      // Missed yesterday, reset streak
+      await prisma.streak.update({
+        where: { id: streak.id },
+        data: { current: 0 },
+      });
+    }
   }
 }
 

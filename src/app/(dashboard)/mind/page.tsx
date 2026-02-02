@@ -7,20 +7,7 @@ import { ScoreRing } from '@/components/scores/ScoreRing';
 import { ActivityLogModal, ActivityDetailModal } from '@/components/activities';
 import { MeditationLogModal } from '@/components/meditation';
 import { JournalingLogModal } from '@/components/journaling';
-import {
-  SubCategoryTabs,
-  MeditationDashboard,
-  ReadingDashboard,
-  LearningDashboard,
-  JournalingDashboard,
-  CustomDashboard,
-  AllActivitiesDashboard,
-  AddSubCategoryModal,
-  EditSubCategoryModal,
-} from '@/components/subcategories';
-import type { CustomSubcategory } from '@/components/subcategories';
-import { QuickLogChips } from '@/components/activities/QuickLogChips';
-import { PREDEFINED_SUBCATEGORIES, getSubcategoryConfig, getSubcategoriesForPillar } from '@/lib/subcategories';
+import { getSubcategoryConfig } from '@/lib/subcategories';
 import { useAuth } from '@/hooks/useAuth';
 import { DateNavigation } from '@/components/navigation';
 import { MindFAB } from '@/components/navigation/MindFAB';
@@ -58,6 +45,26 @@ interface Activity {
   isHabit: boolean;
 }
 
+interface MeditationDetails {
+  durationMinutes: number;
+  technique: string | null;
+  moodBefore: string | null;
+  moodAfter: string | null;
+}
+
+interface JournalEntry {
+  entryType: string;
+  mood: string | null;
+  content: string;
+  wordCount: number;
+}
+
+interface TrainingDetails {
+  workoutType: string | null;
+  durationMinutes: number | null;
+  intensity: string | null;
+}
+
 interface ActivityLog {
   id: string;
   activityId: string;
@@ -65,6 +72,9 @@ interface ActivityLog {
   subCategory: string;
   pointsEarned: number;
   completedAt: string;
+  meditationDetails: MeditationDetails | null;
+  journalEntry: JournalEntry | null;
+  trainingDetails: TrainingDetails | null;
 }
 
 interface DailyStatusData {
@@ -130,13 +140,10 @@ export default function MindPage() {
   const [dailyStatus, setDailyStatus] = useState<DailyStatusData | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
-  const [customSubcategories, setCustomSubcategories] = useState<CustomSubcategory[]>([]);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [showQuickMeditation, setShowQuickMeditation] = useState(false);
   const [showQuickJournaling, setShowQuickJournaling] = useState(false);
   const [isQuickLogging, setIsQuickLogging] = useState<string | null>(null);
-  const [streak, setStreak] = useState(0);
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -146,27 +153,6 @@ export default function MindPage() {
 
   // Derived state
   const isToday = isDateToday(selectedDate);
-  const [showAddSubcategoryModal, setShowAddSubcategoryModal] = useState(false);
-  const [editingSubcategory, setEditingSubcategory] = useState<CustomSubcategory | null>(null);
-
-  // Calculate points per subcategory
-  const pointsByCategory = activityLogs.reduce<Record<string, number>>((acc, log) => {
-    const cat = log.subCategory.toUpperCase();
-    acc[cat] = (acc[cat] || 0) + log.pointsEarned;
-    return acc;
-  }, {});
-
-  // Get activities for the current subcategory that are habits
-  const habitActivities = activities.filter(
-    (a) =>
-      a.isHabit &&
-      a.subCategory.toUpperCase() === selectedCategory.toUpperCase()
-  );
-
-  // Get activity logs for the current subcategory
-  const currentCategoryLogs = activityLogs.filter(
-    (log) => log.subCategory.toUpperCase() === selectedCategory.toUpperCase()
-  );
 
   // Fetch all data
   const fetchData = useCallback(async () => {
@@ -179,11 +165,10 @@ export default function MindPage() {
       const dateParam = isDateToday(selectedDate) ? '' : `?date=${dateStr}`;
       const headers = { Authorization: `Bearer ${token}` };
 
-      const [statusRes, activitiesRes, logsRes, subcategoriesRes] = await Promise.all([
+      const [statusRes, activitiesRes, logsRes] = await Promise.all([
         fetch(`/api/v1/daily-status${dateParam}`, { headers }),
         fetch('/api/v1/activities?pillar=MIND', { headers }),
         fetch(`/api/v1/activity-logs?pillar=MIND&date=${dateStr}`, { headers }),
-        fetch('/api/v1/subcategories?pillar=MIND', { headers }),
       ]);
 
       if (statusRes.ok) {
@@ -200,14 +185,6 @@ export default function MindPage() {
         const logsData = await logsRes.json();
         setActivityLogs(logsData.data || []);
       }
-
-      if (subcategoriesRes.ok) {
-        const data = await subcategoriesRes.json();
-        setCustomSubcategories(data.data.subcategories || []);
-      }
-
-      // TODO: Fetch streak data when API is available
-      setStreak(0);
     } catch (error) {
       console.error('Failed to fetch mind data:', error);
     } finally {
@@ -261,56 +238,33 @@ export default function MindPage() {
     }
   };
 
-  // Handle add custom category
-  const handleAddCustomCategory = () => {
-    setShowAddSubcategoryModal(true);
-  };
+  // Handle uncomplete (toggle off)
+  const handleUncomplete = async (activityId: string) => {
+    setIsQuickLogging(activityId);
+    try {
+      const res = await fetch(`/api/v1/activities/${activityId}/complete`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-  // Handle subcategory created
-  const handleSubcategoryCreated = (subcategory: CustomSubcategory) => {
-    setCustomSubcategories((prev) => [...prev, subcategory]);
-    setNotification({ type: 'success', message: `${subcategory.name} category created!` });
-  };
-
-  // Handle edit custom subcategory
-  const handleEditCustomSubcategory = (subcategory: CustomSubcategory) => {
-    setEditingSubcategory(subcategory);
-  };
-
-  // Handle subcategory updated
-  const handleSubcategoryUpdated = (updated: CustomSubcategory) => {
-    setCustomSubcategories((prev) =>
-      prev.map((s) => (s.id === updated.id ? updated : s))
-    );
-    setNotification({ type: 'success', message: `${updated.name} updated!` });
-  };
-
-  // Handle subcategory deleted
-  const handleSubcategoryDeleted = () => {
-    if (editingSubcategory) {
-      setCustomSubcategories((prev) =>
-        prev.filter((s) => s.id !== editingSubcategory.id)
-      );
-      // If we were viewing the deleted category, switch to ALL
-      if (selectedCategory === editingSubcategory.key) {
-        setSelectedCategory('ALL');
+      if (res.ok) {
+        setNotification({ type: 'success', message: 'Completion removed' });
+        fetchData();
+      } else {
+        const error = await res.json();
+        setNotification({
+          type: 'error',
+          message: error.message || 'Failed to remove completion',
+        });
       }
-      setNotification({ type: 'success', message: 'Category deleted!' });
-      fetchData(); // Refresh to update activities
+    } catch (error) {
+      console.error('Uncomplete error:', error);
+      setNotification({ type: 'error', message: 'Failed to remove completion' });
+    } finally {
+      setIsQuickLogging(null);
     }
-  };
-
-  // Get all available subcategories for reassignment dropdown
-  const getAllSubcategories = () => {
-    const predefined = getSubcategoriesForPillar('MIND').map((key) => ({
-      key,
-      name: getSubcategoryConfig(key)?.label || key,
-    }));
-    const custom = customSubcategories.map((s) => ({
-      key: s.key,
-      name: s.name,
-    }));
-    return [...predefined, ...custom];
   };
 
   // Handle activity selection (for edit/delete)
@@ -377,88 +331,24 @@ export default function MindPage() {
     }
   };
 
-  // Calculate mind score before renderDashboard
+  // Calculate mind score
   const mindScore = dailyStatus?.mind.score ?? 0;
 
-  // Render the appropriate dashboard based on selected category
-  const renderDashboard = () => {
-    // All activities view
-    if (selectedCategory === 'ALL') {
-      // Map daily status activities to the expected format
-      const completedActivities = (dailyStatus?.mind.activities ?? []).map((a) => ({
-        id: a.id,
-        name: a.name,
-        category: a.category,
-        completedAt: a.completedAt,
-      }));
+  // Get completed activity IDs for today
+  const completedActivityIds = new Set(
+    (dailyStatus?.mind.activities ?? []).map((a) => a.id)
+  );
 
-      return (
-        <AllActivitiesDashboard
-          activities={activities}
-          completedActivities={completedActivities}
-          totalPoints={mindScore}
-          pillar="MIND"
-          onQuickLog={handleQuickLog}
-          onActivitySelect={(activity) => handleActivitySelect(activity as Activity)}
-          isLogging={isQuickLogging}
-        />
-      );
-    }
+  // Group activities by subcategory
+  const groupedActivities = activities.reduce<Record<string, Activity[]>>((acc, activity) => {
+    const cat = activity.subCategory.toUpperCase();
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(activity);
+    return acc;
+  }, {});
 
-    const categoryActivities = currentCategoryLogs.map((log) => ({
-      id: log.id,
-      name: log.activityName,
-      completedAt: log.completedAt,
-      pointsEarned: log.pointsEarned,
-    }));
-    const totalPoints = pointsByCategory[selectedCategory.toUpperCase()] || 0;
-
-    switch (selectedCategory.toUpperCase()) {
-      case 'MEDITATION':
-        return (
-          <MeditationDashboard
-            activities={categoryActivities}
-            totalPoints={totalPoints}
-            streak={streak}
-            onStartMeditation={() => setShowQuickMeditation(true)}
-            isToday={isToday}
-          />
-        );
-      case 'READING':
-        return (
-          <ReadingDashboard
-            activities={categoryActivities}
-            totalPoints={totalPoints}
-          />
-        );
-      case 'LEARNING':
-        return (
-          <LearningDashboard
-            activities={categoryActivities}
-            totalPoints={totalPoints}
-          />
-        );
-      case 'JOURNALING':
-        return (
-          <JournalingDashboard
-            activities={categoryActivities}
-            totalPoints={totalPoints}
-            onStartJournaling={() => setShowQuickJournaling(true)}
-            isToday={isToday}
-          />
-        );
-      default:
-        // Custom category
-        return (
-          <CustomDashboard
-            activities={categoryActivities}
-            totalPoints={totalPoints}
-            categoryName={selectedCategory}
-            pillar="MIND"
-          />
-        );
-    }
-  };
+  // Get categories sorted
+  const categories = Object.keys(groupedActivities).sort();
 
   // Loading state
   if (isLoading) {
@@ -514,38 +404,27 @@ export default function MindPage() {
       <motion.header
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
+        className="flex items-center gap-4"
       >
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="w-10 h-10 rounded-lg bg-surface-light flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-lighter transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold" style={{ color: MIND_COLOR }}>
-              Mind
-            </h1>
-            <p className="text-text-muted text-sm">Mental wellness tracking</p>
-          </div>
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="w-10 h-10 rounded-lg bg-surface-light flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-lighter transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: MIND_COLOR }}>
+            Mind
+          </h1>
+          <p className="text-text-muted text-sm">Mental wellness tracking</p>
         </div>
-        {isToday && (
-          <button
-            onClick={() => setShowActivityModal(true)}
-            className="px-4 py-2 rounded-lg font-medium text-background transition-colors hover:opacity-90"
-            style={{ backgroundColor: MIND_COLOR }}
-          >
-            Log Activity
-          </button>
-        )}
       </motion.header>
 
       {/* Date Navigation */}
@@ -579,70 +458,6 @@ export default function MindPage() {
         </div>
       </motion.section>
 
-      {/* Streak Display */}
-      {streak > 0 && (
-        <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="flex justify-center"
-        >
-          <div
-            className="flex items-center gap-2 px-4 py-2 rounded-full"
-            style={{ backgroundColor: `${MIND_COLOR}20` }}
-          >
-            <svg className="w-5 h-5" fill="none" stroke={MIND_COLOR} viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"
-              />
-            </svg>
-            <span className="font-medium" style={{ color: MIND_COLOR }}>
-              {streak} day streak
-            </span>
-          </div>
-        </motion.section>
-      )}
-
-      {/* SubCategory Tabs */}
-      <motion.section
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-      >
-        <SubCategoryTabs
-          pillar="MIND"
-          selectedCategory={selectedCategory}
-          customCategories={customSubcategories}
-          onSelect={setSelectedCategory}
-          onAddCustom={handleAddCustomCategory}
-          onEditCustom={handleEditCustomSubcategory}
-        />
-      </motion.section>
-
-      {/* Quick Log Chips (only for today) */}
-      {isToday && (
-        <motion.section
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-        >
-          <QuickLogChips
-            activities={habitActivities.map((a) => ({
-              id: a.id,
-              name: a.name,
-              points: a.points,
-              subCategory: a.subCategory,
-            }))}
-            onLog={handleQuickLog}
-            isLogging={isQuickLogging}
-            pillarColor={MIND_COLOR}
-          />
-        </motion.section>
-      )}
-
       {/* Historical data indicator */}
       {!isToday && (
         <motion.div
@@ -659,59 +474,330 @@ export default function MindPage() {
         </motion.div>
       )}
 
-      {/* Dashboard Content */}
+      {/* All Activities - Grouped by Category */}
       <motion.section
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        key={selectedCategory}
+        transition={{ delay: 0.15 }}
+        className="space-y-4"
       >
-        <AnimatePresence mode="wait">
+        {/* Points Summary */}
+        <div className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5">
+          <div className="flex items-center justify-between">
+            <span className="text-text-secondary">Today&apos;s Points</span>
+            <span className="text-xl font-bold" style={{ color: MIND_COLOR }}>
+              {mindScore} pts
+            </span>
+          </div>
+          <div className="mt-2 text-sm text-text-muted">
+            {completedActivityIds.size} of {activities.length} activities completed
+          </div>
+        </div>
+
+        {/* Activities by Category */}
+        {categories.length > 0 ? (
+          categories.map((category, idx) => {
+            const categoryActivities = groupedActivities[category] || [];
+            const config = getSubcategoryConfig(category);
+            const categoryColor = config?.color ?? MIND_COLOR;
+            const categoryLabel = config?.label ?? category;
+            const completedInCategory = categoryActivities.filter((a) =>
+              completedActivityIds.has(a.id)
+            ).length;
+
+            return (
+              <motion.div
+                key={category}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.05 * (idx + 1) }}
+                className="bg-surface/60 backdrop-blur-lg rounded-2xl p-4 border border-white/5"
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{ backgroundColor: categoryColor }}
+                  />
+                  <h3 className="text-sm font-medium text-text-secondary">{categoryLabel}</h3>
+                  <span className="text-xs text-text-muted ml-auto">
+                    {completedInCategory}/{categoryActivities.length}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {categoryActivities.map((activity) => {
+                    const isCompleted = completedActivityIds.has(activity.id);
+                    const isCurrentlyLogging = isQuickLogging === activity.id;
+                    const completionLog = activityLogs.find(
+                      (log) => log.activityId === activity.id
+                    );
+                    const completionTime = completionLog
+                      ? new Date(completionLog.completedAt).toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })
+                      : null;
+
+                    // Get details for completed activities
+                    const hasDetails =
+                      completionLog?.meditationDetails ||
+                      completionLog?.journalEntry ||
+                      completionLog?.trainingDetails;
+
+                    return (
+                      <div
+                        key={activity.id}
+                        className={`rounded-xl transition-colors ${
+                          isCompleted
+                            ? 'bg-white/5'
+                            : 'bg-surface-light hover:bg-surface-lighter'
+                        }`}
+                      >
+                        {/* Main row */}
+                        <div className="flex items-center justify-between py-3 px-4">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            {/* Toggle checkbox */}
+                            {isToday && (
+                              <button
+                                onClick={() =>
+                                  isCompleted
+                                    ? handleUncomplete(activity.id)
+                                    : handleQuickLog(activity.id)
+                                }
+                                disabled={isCurrentlyLogging}
+                                className={`w-6 h-6 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                                  isCompleted ? '' : 'border-2 hover:border-opacity-60'
+                                }`}
+                                style={{
+                                  backgroundColor: isCompleted ? categoryColor : 'transparent',
+                                  borderColor: isCompleted ? categoryColor : 'rgba(255,255,255,0.2)',
+                                }}
+                              >
+                                {isCurrentlyLogging ? (
+                                  <svg
+                                    className="w-4 h-4 animate-spin"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    style={{ color: isCompleted ? '#1a1a2e' : categoryColor }}
+                                  >
+                                    <circle
+                                      className="opacity-25"
+                                      cx="12"
+                                      cy="12"
+                                      r="10"
+                                      stroke="currentColor"
+                                      strokeWidth="4"
+                                    />
+                                    <path
+                                      className="opacity-75"
+                                      fill="currentColor"
+                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    />
+                                  </svg>
+                                ) : isCompleted ? (
+                                  <svg
+                                    className="w-4 h-4 text-background"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={3}
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                ) : null}
+                              </button>
+                            )}
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`text-sm font-medium truncate ${
+                                    isCompleted ? 'text-text-muted' : 'text-text-primary'
+                                  }`}
+                                >
+                                  {activity.name}
+                                </span>
+                                {activity.isHabit && (
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-white/5 text-text-muted flex-shrink-0">
+                                    Habit
+                                  </span>
+                                )}
+                              </div>
+                              {isCompleted && completionTime && (
+                                <span className="text-xs text-text-muted">
+                                  Completed at {completionTime}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <span
+                              className={`text-sm font-medium ${
+                                isCompleted ? 'text-text-muted' : ''
+                              }`}
+                              style={{ color: isCompleted ? undefined : categoryColor }}
+                            >
+                              {activity.points} pts
+                            </span>
+
+                            {/* Edit button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleActivitySelect(activity);
+                              }}
+                              className="p-1.5 rounded text-text-muted hover:text-text-primary hover:bg-surface-lighter transition-colors"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Details section for completed activities */}
+                        {isCompleted && hasDetails && (
+                          <div className="px-4 pb-3 pt-1 border-t border-white/5 ml-9">
+                            {/* Meditation Details */}
+                            {completionLog?.meditationDetails && (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-3 text-xs">
+                                  <span className="text-text-secondary">
+                                    {completionLog.meditationDetails.durationMinutes} min
+                                  </span>
+                                  {completionLog.meditationDetails.technique && (
+                                    <span className="text-text-muted">
+                                      {completionLog.meditationDetails.technique.replace(/_/g, ' ').toLowerCase()}
+                                    </span>
+                                  )}
+                                </div>
+                                {(completionLog.meditationDetails.moodBefore || completionLog.meditationDetails.moodAfter) && (
+                                  <div className="flex items-center gap-2 text-xs text-text-muted">
+                                    {completionLog.meditationDetails.moodBefore && (
+                                      <span>Before: {completionLog.meditationDetails.moodBefore.toLowerCase()}</span>
+                                    )}
+                                    {completionLog.meditationDetails.moodBefore && completionLog.meditationDetails.moodAfter && (
+                                      <span>→</span>
+                                    )}
+                                    {completionLog.meditationDetails.moodAfter && (
+                                      <span>After: {completionLog.meditationDetails.moodAfter.toLowerCase()}</span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Journal Entry Details */}
+                            {completionLog?.journalEntry && (
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-3 text-xs">
+                                  <span
+                                    className="px-2 py-0.5 rounded-full"
+                                    style={{ backgroundColor: `${categoryColor}20`, color: categoryColor }}
+                                  >
+                                    {completionLog.journalEntry.entryType.replace(/_/g, ' ').toLowerCase()}
+                                  </span>
+                                  <span className="text-text-muted">
+                                    {completionLog.journalEntry.wordCount} words
+                                  </span>
+                                  {completionLog.journalEntry.mood && (
+                                    <span className="text-text-muted">
+                                      Mood: {completionLog.journalEntry.mood.toLowerCase()}
+                                    </span>
+                                  )}
+                                </div>
+                                {completionLog.journalEntry.content && (
+                                  <p className="text-xs text-text-secondary line-clamp-3 leading-relaxed">
+                                    {completionLog.journalEntry.content}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Training Details (if mind has any) */}
+                            {completionLog?.trainingDetails && (
+                              <div className="flex items-center gap-3 text-xs">
+                                {completionLog.trainingDetails.durationMinutes && (
+                                  <span className="text-text-secondary">
+                                    {completionLog.trainingDetails.durationMinutes} min
+                                  </span>
+                                )}
+                                {completionLog.trainingDetails.workoutType && (
+                                  <span className="text-text-muted">
+                                    {completionLog.trainingDetails.workoutType.replace(/_/g, ' ').toLowerCase()}
+                                  </span>
+                                )}
+                                {completionLog.trainingDetails.intensity && (
+                                  <span className="text-text-muted">
+                                    {completionLog.trainingDetails.intensity.toLowerCase()} intensity
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            );
+          })
+        ) : (
+          /* Empty State */
           <motion.div
-            key={selectedCategory}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+            className="text-center py-12"
           >
-            {renderDashboard()}
+            <div
+              className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center"
+              style={{ backgroundColor: `${MIND_COLOR}15` }}
+            >
+              <svg className="w-8 h-8" fill="none" stroke={MIND_COLOR} viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                />
+              </svg>
+            </div>
+            <p className="text-text-muted mb-2">No activities yet</p>
+            <p className="text-sm text-text-muted/70">
+              Create activities to track your mind progress
+            </p>
           </motion.div>
-        </AnimatePresence>
+        )}
       </motion.section>
 
-      {/* Activity Log Modal - Use specialized modals for MEDITATION and JOURNALING */}
-      {selectedCategory === 'MEDITATION' ? (
-        <MeditationLogModal
-          isOpen={showActivityModal}
-          onClose={() => setShowActivityModal(false)}
-          onLogged={() => {
-            setShowActivityModal(false);
-            fetchData();
-            setNotification({ type: 'success', message: 'Meditation logged!' });
-          }}
-        />
-      ) : selectedCategory === 'JOURNALING' ? (
-        <JournalingLogModal
-          isOpen={showActivityModal}
-          onClose={() => setShowActivityModal(false)}
-          onLogged={() => {
-            setShowActivityModal(false);
-            fetchData();
-            setNotification({ type: 'success', message: 'Journal entry saved!' });
-          }}
-        />
-      ) : (
-        <ActivityLogModal
-          isOpen={showActivityModal}
-          onClose={() => setShowActivityModal(false)}
-          onLogged={() => {
-            setShowActivityModal(false);
-            fetchData();
-            setNotification({ type: 'success', message: 'Activity logged!' });
-          }}
-          pillar="MIND"
-        />
-      )}
+      {/* Activity Log Modal */}
+      <ActivityLogModal
+        isOpen={showActivityModal}
+        onClose={() => setShowActivityModal(false)}
+        onLogged={() => {
+          setShowActivityModal(false);
+          fetchData();
+          setNotification({ type: 'success', message: 'Activity logged!' });
+        }}
+        pillar="MIND"
+      />
 
       {/* Activity Detail Modal (Edit/Delete) */}
       <ActivityDetailModal
@@ -723,25 +809,6 @@ export default function MindPage() {
         }}
         onUpdate={handleActivityUpdate}
         onDelete={handleActivityDelete}
-      />
-
-      {/* Add Subcategory Modal */}
-      <AddSubCategoryModal
-        isOpen={showAddSubcategoryModal}
-        onClose={() => setShowAddSubcategoryModal(false)}
-        onSuccess={handleSubcategoryCreated}
-        pillar="MIND"
-      />
-
-      {/* Edit Subcategory Modal */}
-      <EditSubCategoryModal
-        isOpen={!!editingSubcategory}
-        onClose={() => setEditingSubcategory(null)}
-        onSuccess={handleSubcategoryUpdated}
-        onDelete={handleSubcategoryDeleted}
-        subcategory={editingSubcategory}
-        pillar="MIND"
-        availableSubcategories={getAllSubcategories()}
       />
 
       {/* Quick-Add Modals */}
@@ -772,6 +839,7 @@ export default function MindPage() {
         <MindFAB
           onMeditationClick={() => setShowQuickMeditation(true)}
           onJournalingClick={() => setShowQuickJournaling(true)}
+          onOtherActivityClick={() => setShowActivityModal(true)}
         />
       )}
     </motion.div>

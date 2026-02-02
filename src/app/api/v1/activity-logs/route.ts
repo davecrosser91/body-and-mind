@@ -116,6 +116,7 @@ export const GET = requireAuth(async (request: NextRequest, { user }) => {
         ? {
             entryType: completion.journalEntry.entryType,
             mood: completion.journalEntry.mood,
+            content: completion.journalEntry.content,
             wordCount: completion.journalEntry.wordCount,
           }
         : null,
@@ -124,6 +125,9 @@ export const GET = requireAuth(async (request: NextRequest, { user }) => {
             workoutType: completion.trainingDetails.workoutType,
             durationMinutes: completion.trainingDetails.durationMinutes,
             intensity: completion.trainingDetails.intensity,
+            muscleGroups: completion.trainingDetails.muscleGroups,
+            calories: completion.trainingDetails.calories,
+            rpe: completion.trainingDetails.rpe,
           }
         : null,
     }))
